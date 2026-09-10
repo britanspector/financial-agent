@@ -28,7 +28,8 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --strict-markers -m 'not integration'"
+addopts = "-ra --strict-markers -m 'not integration and not live'"
 markers = [
     "integration: full 2,000-user generation and database validation",
+    "live: tests that call a real external data service",
 ]

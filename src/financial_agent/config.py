@@ -25,3 +25,6 @@ class Settings(BaseSettings):
     user_data_timeout_seconds: float = Field(default=5.0, gt=0, le=300)
     user_api_keys: SecretStr = Field(default=SecretStr("[]"), exclude=True, repr=False)
     caller_api_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    tushare_token: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    tushare_base_url: str = "https://api.tushare.pro"
+    market_data_timeout_seconds: float = Field(default=10.0, gt=0, le=300)

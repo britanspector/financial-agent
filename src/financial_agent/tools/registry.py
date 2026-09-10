@@ -18,7 +18,7 @@ class ToolSpec:
     description: str
     input_model: type[Schema]
     output_model: type[Schema]
-    scope: Scope
+    scope: Scope | None
     operation: str
 
 

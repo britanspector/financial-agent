@@ -6,10 +6,14 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def isolated_settings(monkeypatch, tmp_path):
+def isolated_settings(monkeypatch, tmp_path, request):
+    is_live = request.node.get_closest_marker("live") is not None
     for key in os.environ:
+        if is_live and key.upper() == "FINANCIAL_AGENT_TUSHARE_TOKEN":
+            continue
         if key.upper().startswith("FINANCIAL_AGENT_"):
             monkeypatch.delenv(key)
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "false")
-    monkeypatch.chdir(tmp_path)
+    if not is_live:
+        monkeypatch.chdir(tmp_path)

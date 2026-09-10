@@ -2,7 +2,7 @@
 
 用于深度学习和求职展示的本地多工具 Agent 工程探索。全部用户数据为 synthetic，不连接真实公司内部系统。
 
-**当前阶段：Phase 1 用户数据子步骤完成，等待验收。** Phase 0 已完成；Phase 1 的 MarketDataProvider 和知识源样本尚未交付。每个阶段/约定子步骤验收后再继续。
+**当前阶段：Phase 1.2 完成。** 用户数据服务和 Market Data v0.1 已完成；市场数据通过 Tushare REST 提供 A 股未复权日线和日终 snapshot。
 
 ## 项目结构与依赖
 
@@ -14,11 +14,13 @@ financial-agent/
 │   ├── schemas.py / logging_config.py
 │   ├── demo_faults.py           # 仅测试/demo 使用的故障序列
 │   ├── tools/                  # ToolResult、ToolSpec、ToolRegistry
-│   └── user_data/              # models、fixtures、repository、auth、audit、service、runtime
+│   ├── user_data/              # models、fixtures、repository、auth、audit、service、runtime
+│   └── market_data/            # Market models、Normalizer、TushareProvider、Service
 ├── tests/
 │   ├── conftest.py / test_config.py / test_schemas.py
 │   ├── test_logging.py / test_bootstrap.py
-│   └── user_data/              # 数据、权限、Tool、故障、审计、CLI
+│   ├── user_data/              # 数据、权限、Tool、故障、审计、CLI
+│   └── market_data/            # REST Provider、Tool 与 live test
 └── data/                       # 生成的 SQLite 和审计，不提交 Git
 ```
 
@@ -32,7 +34,7 @@ Python >=3.11；本机验证使用 Python 3.13.5。依赖范围定义在 pyproje
 | pytest >=8,<10（dev） | 自动化测试 |
 | setuptools >=77,<83（build） | 包构建及 editable 安装 |
 
-**Phase 1.1 无新增依赖。** SQLite、Decimal、鉴权比较、JSONL 和计时使用标准库。没有额外安装 provider SDK、ORM 或 RAG 依赖。
+Market Data 复用 `httpx` 直连 Tushare REST，不安装 Tushare/AKShare SDK、ORM 或 RAG 依赖。
 
 ## 安装与验证
 
@@ -166,6 +168,30 @@ ToolResult[T] 固定包含 status / data / source / latency / error / request_id
 
 HTTP API 不暴露 Agent `ToolResult`：成功响应是领域模型，失败响应是 `ApiError`。Client 将 401、403、404、422、5xx 以及 timeout/连接失败恢复为 Agent 层 `ToolResult`。每次 Client 调用生成 `X-Request-ID`，Server 将其用于业务 ToolResult 和 JSONL 审计；transport 错误仅通过日志记录，不伪造业务 AuditSink 事件。
 
+## Market Data v0.1
+
+Market Tool 使用 `MarketDataService → TushareProvider → Tushare REST API`，不经过 User Data HTTP Service，也不做用户数据 API Key、scope 或用户白名单鉴权。公开注册函数为 `build_market_tools(settings)`；Tushare token 仅从 `FINANCIAL_AGENT_TUSHARE_TOKEN` 注入。
+
+两个 Tool 为 `get_market_snapshot` 和 `get_market_history`。当前 120 积分版本只支持沪深 A 股：symbol 在内部统一为 `600519.SH`、`000001.SZ`；不支持指数、实时行情或 qfq/hfq。history 输入只包含 `symbol/start_date/end_date`，日期区间为 `[start_date, end_date)`，结果中的 `source` 固定为 `tushare`、`asset_type` 固定为 `stock`、`adjustment` 固定为 `none`。
+
+`get_market_snapshot` 是日终快照：Provider 向前查询 90 个自然日并选择最新 daily 记录，`snapshot_kind=daily_close`。`as_of` 表示对应交易日 15:00 Asia/Shanghai，不表示 Tushare 实际入库时间。Tushare 的 `vol` 单位为手、`amount` 单位为千元；领域模型分别转换为股和元。
+
+本地配置示例（不要提交真实 token）：
+
+```powershell
+$env:FINANCIAL_AGENT_TUSHARE_TOKEN = "<rotated-token>"
+```
+
+TushareProvider 使用同步 `httpx.Client` 直接 POST `https://api.tushare.pro`，解析 `code/msg/data.fields/data.items`，不依赖 Tushare SDK、pandas 或 DataFrame，也不自动重试。进入后续 LangGraph 并行 Tool 阶段后，再评估线程池隔离。
+
+Market Tool 的 `EMPTY_RESULT` 目前没有 HTTP transport；如果 `ToolError.http_status=404`，它只是兼容现有 Agent 错误模型的元数据，不代表本阶段提供 HTTP endpoint。
+
+默认测试不会访问真实行情。真实 Tushare smoke test 单独运行；未配置 token 时自动跳过：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q -m live
+```
+
 ## 测试/demo 故障序列
 
 正常 build_user_tools 不装配故障 hook。测试/demo 可显式构造服务（沿用上文 settings）：
@@ -201,8 +227,9 @@ registry = register_user_tools(UserDataService(
 
 - Phase 0：15 个测试通过，模块与 CLI 自检成功。
 - Phase 1.1：106 个测试通过，包含全部 Phase 0 测试；pip check 无依赖冲突。
+- Phase 1.2：116 个默认测试通过；2 个 Tushare live tests 通过；pip check 无依赖冲突。
 - 覆盖四个业务 Tool、FastAPI endpoint、Async HTTP Client、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
-- 测试使用临时 SQLite、临时审计、synthetic 凭证，不使用 live provider。
+- Market Data 测试使用 `httpx.MockTransport`，不访问 live provider；live smoke test 使用 `pytest -m live` 单独运行。
 
 实际直接依赖版本：LangGraph 1.2.11、Pydantic 2.13.5、pydantic-settings 2.15.0、pytest 9.1.1。记录是本机验证结果，不是锁文件或用户阶段验收。
 
@@ -215,13 +242,13 @@ registry = register_user_tools(UserDataService(
 ## 已知限制
 
 - 尚无应用 LangGraph 工作流、历史压缩、Planner、RAG、RL 或模型质量评估；测试中的单节点图仅验证依赖可用。
-- 尚无 MarketDataProvider、知识源样本、live adapter、FastAPI、真实 deadline 或 bounded retry 执行器。
+- Market Data v0.1 已提供同步 Tushare REST Provider；120 积分下尚无指数、复权、实时行情、分钟线、Level-2、新闻、资金流或指标库。
 - 当前为同步本地访问；审计没有多进程并发保证、轮转或防篡改能力。日志不是通用敏感数据脱敏器。
 - 未定义计划结构或 token budget，模型 key 仅预留；不支持多币种、会计对账和数据库迁移。
 - 依赖只有兼容范围，未锁定全部传递依赖；只在当前 Windows 环境验证。
 
 ## 下一步
 
-等待用户验收 Phase 1 用户数据子步骤。验收后再继续 Phase 1 的 MarketDataProvider / LocalSnapshotProvider 与三类知识源最小样本；整个 Phase 1 尚未完成。FastAPI、真实 delay/deadline 和 live demo adapter 按后续约定推进。
+下一步进入 Agent 编排，评估 LangGraph 多 Tool 并行和同步市场 Provider 的线程池隔离。
 
 后续工程约束：外部模型和数据源必须经 adapter/registry，LangGraph node 不直接依赖 provider SDK；API key 仅由环境配置注入；所有用户数据为 synthetic；每个功能补测试，并同步更新 README 的“当前能力 / 已知限制 / 下一步”。
