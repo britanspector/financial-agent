@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from pydantic import BaseModel
+
 from financial_agent.schemas import Schema
 from financial_agent.user_data.auth import CallContext, Scope
 from financial_agent.tools.contracts import ToolResult
@@ -17,7 +19,7 @@ class ToolSpec:
     name: str
     description: str
     input_model: type[Schema]
-    output_model: type[Schema]
+    output_model: type[BaseModel]
     scope: Scope | None
     operation: str
 

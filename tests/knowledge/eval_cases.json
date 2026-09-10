@@ -1,0 +1,28 @@
+[
+  {"case_id":"rr-01","tool":"search_research_reports","arguments":{"query":"澄海智造交付恢复后利润率如何变化"},"relevant_document_ids":["RR-CHMZ-20260418-03"]},
+  {"case_id":"rr-02","tool":"search_research_reports","arguments":{"query":"曜石半导体通用器件降价导致下调盈利预测"},"relevant_document_ids":["RR-YSHD-20250912-02"]},
+  {"case_id":"rr-03","tool":"search_research_reports","arguments":{"query":"青禾医药患者入组晚于计划","as_of":"2025-12-31"},"relevant_document_ids":["RR-QHYY-20251020-02"]},
+  {"case_id":"rr-04","tool":"search_research_reports","arguments":{"query":"云帆软件经营现金流转正和订阅规模效应"},"relevant_document_ids":["RR-YFRJ-20260330-03"]},
+  {"case_id":"rr-05","tool":"search_research_reports","arguments":{"query":"瀚源新能源竞标价格下降 单瓦时盈利假设"},"relevant_document_ids":["RR-HYXNY-20250905-02"]},
+  {"case_id":"rr-06","tool":"search_research_reports","arguments":{"query":"沧澜消费渠道库存回到健康水平"},"relevant_document_ids":["RR-CLXF-20260716-03"]},
+  {"case_id":"rr-07","tool":"search_research_reports","arguments":{"query":"远陆物流线路整合提高装载率"},"relevant_document_ids":["RR-YULL-20260522-03"]},
+  {"case_id":"rr-08","tool":"search_research_reports","arguments":{"query":"安岳银行关注类贷款上升和拨备覆盖","as_of":"2025-12-31"},"relevant_document_ids":["RR-AYYH-20251031-02"]},
+
+  {"case_id":"reg-01","tool":"search_regulatory_knowledge","arguments":{"query":"融资买入最低保证金比例调整为90%","issuer":"中证融资服务中心"},"relevant_document_ids":["AP-MARGIN-RATIO-202601"]},
+  {"case_id":"reg-02","tool":"search_regulatory_knowledge","arguments":{"query":"2025年融资买入最低保证金比例是多少","as_of":"2025-06-01"},"relevant_document_ids":["AP-MARGIN-RATIO-202401"]},
+  {"case_id":"reg-03","tool":"search_regulatory_knowledge","arguments":{"query":"普通股票折算率上限调整到65%"},"relevant_document_ids":["AP-MARGIN-HAIRCUT-202601"]},
+  {"case_id":"reg-04","tool":"search_regulatory_knowledge","arguments":{"query":"两融账户预警线145%处置线130%"},"relevant_document_ids":["AP-MARGIN-LIQUIDATION-202601"]},
+  {"case_id":"reg-05","tool":"search_regulatory_knowledge","arguments":{"query":"盘后固定价格申报时段15点到15点30"},"relevant_document_ids":["AP-TRADING-AFTERHOURS-202601"]},
+  {"case_id":"reg-06","tool":"search_regulatory_knowledge","arguments":{"query":"澄海智造半年度收入增速更正为12%至16%"},"relevant_document_ids":["AP-CHMZ-EARNINGS-20250802"]},
+  {"case_id":"reg-07","tool":"search_regulatory_knowledge","arguments":{"query":"曜石半导体回购金额上限1.5亿元"},"relevant_document_ids":["AP-YSHD-BUYBACK-20250918"]},
+  {"case_id":"reg-08","tool":"search_regulatory_knowledge","arguments":{"query":"QH-201原适应症试验终止"},"relevant_document_ids":["AP-QHYY-TRIAL-20260220"]},
+
+  {"case_id":"faq-01","tool":"search_business_knowledge","arguments":{"query":"交易密码连续输错被锁怎么办","category":"account"},"relevant_document_ids":["FAQ-ACCOUNT-LOCK-V1"]},
+  {"case_id":"faq-02","tool":"search_business_knowledge","arguments":{"query":"卖出股票的钱什么时候能继续买证券","category":"trading"},"relevant_document_ids":["FAQ-TRADING-FUNDS-V1"]},
+  {"case_id":"faq-03","tool":"search_business_knowledge","arguments":{"query":"卖出股票的钱什么时候能转到银行卡","category":"trading"},"relevant_document_ids":["FAQ-TRADING-FUNDS-V2"]},
+  {"case_id":"faq-04","tool":"search_business_knowledge","arguments":{"query":"维持担保比例低于预警线该怎么办","category":"margin","as_of":"2025-12-31"},"relevant_document_ids":["FAQ-MARGIN-MAINTAIN-V1"]},
+  {"case_id":"faq-05","tool":"search_business_knowledge","arguments":{"query":"两融账户什么情况下会强制平仓","category":"margin"},"relevant_document_ids":["FAQ-MARGIN-MAINTAIN-V2"]},
+  {"case_id":"faq-06","tool":"search_business_knowledge","arguments":{"query":"价格提醒触发后会自动下单吗","category":"product_feature"},"relevant_document_ids":["FAQ-FEATURE-ALERT-V1"]},
+  {"case_id":"faq-07","tool":"search_business_knowledge","arguments":{"query":"条件单达到条件后是否必然成交","category":"product_feature"},"relevant_document_ids":["FAQ-FEATURE-CONDITION-V1"]},
+  {"case_id":"faq-08","tool":"search_business_knowledge","arguments":{"query":"历史收益高能保证未来盈利吗","category":"risk_notice"},"relevant_document_ids":["FAQ-RISK-HISTORY-V1"]}
+]

@@ -3,7 +3,7 @@
 from typing import Literal
 from pathlib import Path
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,3 +28,28 @@ class Settings(BaseSettings):
     tushare_token: SecretStr | None = Field(default=None, exclude=True, repr=False)
     tushare_base_url: str = "https://api.tushare.pro"
     market_data_timeout_seconds: float = Field(default=10.0, gt=0, le=300)
+    knowledge_manifest_path: Path = Path("data/knowledge/manifest.json")
+    rag_embedding_index_path: Path = Path("data/knowledge/index/embeddings.npz")
+    rag_chunk_max_chars: int = Field(default=400, ge=300, le=8_000)
+    rag_rrf_k: int = Field(default=60, ge=1, le=1_000)
+    qwen_api_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    qwen_embedding_model: Literal[
+        "qwen3.7-text-embedding", "qwen3.7-text-embedding-flash"
+    ] = "qwen3.7-text-embedding"
+    qwen_embedding_dimension: int = Field(default=1024)
+    qwen_embedding_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
+    qwen_reranker_model: Literal["qwen3.7-text-rerank"] = "qwen3.7-text-rerank"
+    qwen_reranker_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
+    qwen_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    qwen_embedding_batch_size: int = Field(default=20, ge=1, le=20)
+    qwen_embedding_query_instruct: str = "Retrieve relevant passages from a financial knowledge base."
+    qwen_reranker_instruct: str = "Given a financial search query, retrieve passages that answer the query."
+
+    @model_validator(mode="after")
+    def valid_qwen_embedding_dimension(self):
+        full_dimensions = {256, 512, 768, 1024, 1536, 2048, 2560}
+        flash_dimensions = {256, 512, 768, 1024}
+        allowed = flash_dimensions if self.qwen_embedding_model.endswith("-flash") else full_dimensions
+        if self.qwen_embedding_dimension not in allowed:
+            raise ValueError("Unsupported dimension for configured Qwen embedding model")
+        return self

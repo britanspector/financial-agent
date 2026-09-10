@@ -10,7 +10,9 @@ htmlcov/
 .env
 .env.*
 !.env.example
+Qwen-apiKey-*.csv
 *.log
 /data/*.db
 /data/*.db-*
 /data/*.jsonl
+/data/knowledge/index/

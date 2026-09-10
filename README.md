@@ -2,7 +2,7 @@
 
 用于深度学习和求职展示的本地多工具 Agent 工程探索。全部用户数据为 synthetic，不连接真实公司内部系统。
 
-**当前阶段：Phase 1.2 完成。** 用户数据服务和 Market Data v0.1 已完成；市场数据通过 Tushare REST 提供 A 股未复权日线和日终 snapshot。
+**当前阶段：Phase 1.4 Multi-source RAG v0.1 实现完成。** 用户数据服务、Market Data v0.1，以及三路 hybrid retrieval Tool 已具备；真实 Qwen 验收需由环境变量提供凭证。
 
 ## 项目结构与依赖
 
@@ -15,20 +15,24 @@ financial-agent/
 │   ├── demo_faults.py           # 仅测试/demo 使用的故障序列
 │   ├── tools/                  # ToolResult、ToolSpec、ToolRegistry
 │   ├── user_data/              # models、fixtures、repository、auth、audit、service、runtime
-│   └── market_data/            # Market models、Normalizer、TushareProvider、Service
+│   ├── market_data/            # Market models、Normalizer、TushareProvider、Service
+│   └── knowledge/              # manifest schema、Markdown ingestion、source-aware chunking
 ├── tests/
 │   ├── conftest.py / test_config.py / test_schemas.py
 │   ├── test_logging.py / test_bootstrap.py
 │   ├── user_data/              # 数据、权限、Tool、故障、审计、CLI
 │   └── market_data/            # REST Provider、Tool 与 live test
-└── data/                       # 生成的 SQLite 和审计，不提交 Git
+└── data/
+    └── knowledge/              # 72 份 synthetic Markdown 和 manifest.json
 ```
 
 Python >=3.11；本机验证使用 Python 3.13.5。依赖范围定义在 pyproject.toml。
 
 | 依赖 | 用途 |
 | --- | --- |
+| jieba >=0.42,<1 | 中文 BM25 分词 |
 | langgraph >=1.0,<2 | 后续图编排的基础依赖；当前仅离线冒烟测试 |
+| numpy >=2,<3 | 本地 dense cosine similarity 与 embedding index |
 | pydantic >=2.10,<3 | schema、输入与结果校验 |
 | pydantic-settings >=2.7,<3 | 环境变量和可选 .env 加载 |
 | pytest >=8,<10（dev） | 自动化测试 |
@@ -192,6 +196,47 @@ Market Tool 的 `EMPTY_RESULT` 目前没有 HTTP transport；如果 `ToolError.h
 .\.venv\Scripts\python.exe -m pytest -q -m live
 ```
 
+## Multi-source RAG v0.1 数据与 ingestion
+
+`data/knowledge/manifest.json` 管理 24 篇研究报告、24 个 FAQ 和 24 份公告/政策。公司、券商、机构及正文均为 synthetic；metadata 不包含检索难度、期望答案或其他测试标签。研报覆盖 8 家公司和跨时间、跨券商观点，其中 8 篇包含 Markdown 表格；FAQ 保留相近问题与生效版本；政策保留发布日期、生效日期和当前状态。
+
+`financial_agent.knowledge.KnowledgeIngestor` 严格读取和校验 manifest，拒绝重复 ID、重复路径、越界路径、缺失文件和不匹配 metadata。第一版 chunking 保持 FAQ 整篇，研究报告按 Markdown heading 切分且长段按句切分，公告/政策额外识别条款边界；Markdown 表格保持为整体。默认 corpus 产生 96 个稳定 Chunk：研究报告 48、FAQ 24、公告/政策 24。
+
+本地检索链为中文 Jieba BM25 + NumPy cosine dense retrieval → RRF → 独立 reranker provider，输出统一 `Evidence[]`，不生成最终回答。研究、公告政策和业务 FAQ 分别通过三个独立 Tool contract 暴露，metadata/time filter 在召回前执行。Research 使用独立 `ResearchRetrievalPolicy`，按 query 命中的公司实体数选择 12/5、20/8 或 30/10 的候选/最终 Top-K。
+
+Embedding index 使用 corpus、Chunk 内容、模型名和维度生成指纹，并将 float32 NumPy 数据与 JSON metadata 持久化到 Git 忽略的本地目录。缺失、模型变化、维度变化、Chunk 顺序或内容变化都会判定为 missing/stale，要求重新构建。
+
+Qwen HTTP adapter 默认使用 `qwen3.7-text-embedding` 1024 维和 `qwen3.7-text-rerank`；将 embedding model 改成 `qwen3.7-text-embedding-flash` 即可切换低成本版本，模型变化会使旧索引自动 stale。默认 base URL 使用北京 DashScope 兼容入口；生产环境应通过 Settings 改为所属地域的业务空间专属 `/api/v1` 地址。
+
+```powershell
+$env:FINANCIAL_AGENT_QWEN_API_KEY = "<your-key>"
+# 可选：$env:FINANCIAL_AGENT_QWEN_EMBEDDING_MODEL = "qwen3.7-text-embedding-flash"
+.\.venv\Scripts\python.exe -m financial_agent build-rag-index
+.\.venv\Scripts\python.exe -m pytest -q -m live
+.\.venv\Scripts\python.exe scripts\evaluate_rag.py
+```
+
+三个 Tool 均只返回 `Evidence[]`：
+
+| Tool | filters |
+| --- | --- |
+| `search_research_reports` | `companies`、`brokers`、`as_of`（publish_date 上界） |
+| `search_regulatory_knowledge` | `issuer`、`as_of`（publish/effective date 上界） |
+| `search_business_knowledge` | `category`、`as_of`（effective_date 上界） |
+
+```powershell
+# 重新生成固定 corpus
+.\.venv\Scripts\python.exe scripts\generate_knowledge_corpus.py
+```
+
+```python
+from pathlib import Path
+
+from financial_agent.knowledge import KnowledgeIngestor
+
+chunks = KnowledgeIngestor().ingest(Path("data/knowledge/manifest.json"))
+```
+
 ## 测试/demo 故障序列
 
 正常 build_user_tools 不装配故障 hook。测试/demo 可显式构造服务（沿用上文 settings）：
@@ -228,6 +273,7 @@ registry = register_user_tools(UserDataService(
 - Phase 0：15 个测试通过，模块与 CLI 自检成功。
 - Phase 1.1：106 个测试通过，包含全部 Phase 0 测试；pip check 无依赖冲突。
 - Phase 1.2：116 个默认测试通过；2 个 Tushare live tests 通过；pip check 无依赖冲突。
+- Phase 1.4（2026-09-11）：151 个默认测试、2 个 integration tests、5 个 live tests 全部通过；真实 Qwen 3.7 retrieval eval 为 Hit@1 0.9583、Hit@5 1.0000、MRR 0.9792、Recall@5 1.0000。
 - 覆盖四个业务 Tool、FastAPI endpoint、Async HTTP Client、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
 - Market Data 测试使用 `httpx.MockTransport`，不访问 live provider；live smoke test 使用 `pytest -m live` 单独运行。
 
@@ -238,10 +284,14 @@ registry = register_user_tools(UserDataService(
 - 可安装的 src-layout 包、配置校验、日志、CLI 和 pytest。
 - 2,000 用户 synthetic SQLite、只读 repository adapter、服务层鉴权、四个业务 Tool，以及本地 FastAPI/Async HTTP Client 链路。
 - 用户白名单与 scopes、统一类型化结果、错误分类、JSONL 审计、可注入故障序列。
+- 72 份多源知识文档、严格 manifest 校验和统一的 source-aware Chunk 输出。
+- 中文 BM25、NumPy dense cosine、RRF、provider rerank、metadata/time filter、Adaptive Top-K 和独立 retrieval eval。
 
 ## 已知限制
 
-- 尚无应用 LangGraph 工作流、历史压缩、Planner、RAG、RL 或模型质量评估；测试中的单节点图仅验证依赖可用。
+- 尚无应用 LangGraph 工作流、历史压缩、Planner、知识检索 Tool、RL 或模型质量评估；测试中的单节点图仅验证依赖可用。
+- 真实 Qwen index 和 live smoke test 依赖宿主通过环境变量提供 API Key；默认测试不会访问外网。
+- Knowledge retrieval 尚未实现复杂表格解析、精细版本推理、query rewrite、decomposition、HyDE、GraphRAG 或向量数据库。
 - Market Data v0.1 已提供同步 Tushare REST Provider；120 积分下尚无指数、复权、实时行情、分钟线、Level-2、新闻、资金流或指标库。
 - 当前为同步本地访问；审计没有多进程并发保证、轮转或防篡改能力。日志不是通用敏感数据脱敏器。
 - 未定义计划结构或 token budget，模型 key 仅预留；不支持多币种、会计对账和数据库迁移。
@@ -249,6 +299,6 @@ registry = register_user_tools(UserDataService(
 
 ## 下一步
 
-下一步进入 Agent 编排，评估 LangGraph 多 Tool 并行和同步市场 Provider 的线程池隔离。
+下一步由宿主注入 Qwen API Key 和所属地域的业务空间 base URL，构建真实 embedding index 并运行 live smoke test；之后根据真实模型 eval 的失败案例迭代检索参数。
 
 后续工程约束：外部模型和数据源必须经 adapter/registry，LangGraph node 不直接依赖 provider SDK；API key 仅由环境配置注入；所有用户数据为 synthetic；每个功能补测试，并同步更新 README 的“当前能力 / 已知限制 / 下一步”。

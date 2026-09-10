@@ -8,6 +8,8 @@ from pydantic import ValidationError
 
 from financial_agent.config import Settings
 from financial_agent.logging_config import configure_logging
+from financial_agent.knowledge.providers import ProviderError
+from financial_agent.knowledge.runtime import build_rag_index
 from financial_agent.user_data.api import create_app
 from financial_agent.user_data.auth import CallContext
 from financial_agent.user_data.fixtures import seed_user_data
@@ -25,6 +27,7 @@ def main() -> int:
     generated.add_argument("--path", type=Path, default=Path("data/synthetic-2000.db"))
     generated.add_argument("--seed", type=int, default=DEFAULT_SEED)
     generated.add_argument("--overwrite", action="store_true")
+    commands.add_parser("build-rag-index", help="Build the persistent Qwen embedding index")
     commands.add_parser("list-tools", help="Print registered tools and input JSON schemas")
     serve = commands.add_parser("serve-user-data", help="Start the local FastAPI user-data service")
     serve.add_argument("--host", default="127.0.0.1")
@@ -76,6 +79,26 @@ def main() -> int:
             "representative_users": result.explanations, "constraints": result.constraints,
             "generation_distribution": result.primary_distribution,
         }, ensure_ascii=False))
+        return 0
+    if args.command == "build-rag-index":
+        try:
+            chunks, state = build_rag_index(settings)
+        except ValueError:
+            print(json.dumps({"status": "error", "message": "Invalid or missing RAG configuration"}))
+            return 1
+        except ProviderError:
+            print(json.dumps({"status": "error", "message": "RAG embedding provider request failed"}))
+            return 1
+        except OSError:
+            print(json.dumps({"status": "error", "message": "Cannot write RAG embedding index"}))
+            return 1
+        print(json.dumps({
+            "status": state,
+            "chunks": chunks,
+            "model": settings.qwen_embedding_model,
+            "dimension": settings.qwen_embedding_dimension,
+            "path": str(settings.rag_embedding_index_path),
+        }))
         return 0
     if args.command in {"list-tools", "call-tool"}:
         try:

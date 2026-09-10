@@ -33,3 +33,25 @@ def test_secret_is_hidden_from_repr_and_serialization(monkeypatch):
     assert fake_key not in repr(settings)
     assert "model_api_key" not in settings.model_dump()
     assert fake_key not in settings.model_dump_json()
+
+
+def test_qwen_secret_and_model_defaults(monkeypatch):
+    fake_key = "synthetic-qwen-secret"
+    monkeypatch.setenv("FINANCIAL_AGENT_QWEN_API_KEY", fake_key)
+    settings = Settings()
+
+    assert settings.qwen_api_key.get_secret_value() == fake_key
+    assert settings.qwen_embedding_model == "qwen3.7-text-embedding"
+    assert settings.qwen_embedding_dimension == 1024
+    assert settings.qwen_reranker_model == "qwen3.7-text-rerank"
+    assert fake_key not in repr(settings)
+    assert "qwen_api_key" not in settings.model_dump()
+    assert fake_key not in settings.model_dump_json()
+
+
+def test_flash_rejects_unsupported_embedding_dimension(monkeypatch):
+    monkeypatch.setenv("FINANCIAL_AGENT_QWEN_EMBEDDING_MODEL", "qwen3.7-text-embedding-flash")
+    monkeypatch.setenv("FINANCIAL_AGENT_QWEN_EMBEDDING_DIMENSION", "2560")
+
+    with pytest.raises(ValidationError):
+        Settings()
