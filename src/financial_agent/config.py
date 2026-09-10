@@ -19,7 +19,9 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     data_mode: Literal["synthetic"] = "synthetic"
     model_api_key: SecretStr | None = Field(default=None, exclude=True)
-    user_db_path: Path = Path("data/user_data.db")
+    user_db_path: Path = Path("data/synthetic-2000.db")
     audit_path: Path = Path("data/audit.jsonl")
+    user_data_base_url: str = "http://127.0.0.1:8000"
+    user_data_timeout_seconds: float = Field(default=5.0, gt=0, le=300)
     user_api_keys: SecretStr = Field(default=SecretStr("[]"), exclude=True, repr=False)
     caller_api_key: SecretStr | None = Field(default=None, exclude=True, repr=False)

@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from datetime import datetime, timezone
 from time import perf_counter
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
@@ -11,7 +11,7 @@ from financial_agent.tools.contracts import ToolFailure, ToolResult
 from financial_agent.tools.registry import ToolSpec
 from financial_agent.user_data.audit import AuditEvent, AuditSink
 from financial_agent.user_data.auth import CallContext, CredentialStore
-from financial_agent.user_data.models import Portfolio, TransactionPage
+from financial_agent.user_data.models import MarginAccount, PortfolioPositions
 from financial_agent.user_data.repository import RepositoryUnavailable, UserDataRepository, UserNotFound
 
 
@@ -27,9 +27,12 @@ class UserDataService:
         self._clock = clock
         self._before_read = before_read
 
-    def execute(self, spec: ToolSpec | None, arguments: object, *, context: CallContext) -> ToolResult:
+    def execute(
+        self, spec: ToolSpec | None, arguments: object, *, context: CallContext,
+        request_id: UUID | None = None,
+    ) -> ToolResult:
         started = self._clock()
-        request_id = uuid4()
+        request_id = request_id or uuid4()
         principal_id = user_id = None
         data = error = None
         status = "error"
@@ -47,18 +50,21 @@ class UserDataService:
             self._credentials.require_user(credential, user_id)
             if self._before_read is not None:
                 self._before_read()
-            if spec.operation == "profile":
-                data = self._repository.get_profile(user_id)
-            elif spec.operation == "portfolio":
-                data = self._repository.get_portfolio(user_id)
-            elif spec.operation == "transactions":
-                data = self._repository.get_transactions(parameters)
-            else:
+            operations = {
+                "customer_context": lambda: self._repository.get_customer_context(user_id),
+                "margin_account": lambda: self._repository.get_margin_account(parameters),
+                "portfolio_positions": lambda: self._repository.get_portfolio_positions(user_id),
+                "portfolio_analytics": lambda: self._repository.get_portfolio_analytics(user_id),
+            }
+            if spec.operation not in operations:
                 raise RuntimeError("Unsupported internal operation")
+            data = operations[spec.operation]()
             data = spec.output_model.model_validate(data)
             empty = (
-                isinstance(data, Portfolio) and (not data.accounts or not any(a.holdings for a in data.accounts))
-            ) or (isinstance(data, TransactionPage) and not data.transactions)
+                isinstance(data, MarginAccount) and not data.daily
+            ) or (
+                isinstance(data, PortfolioPositions) and not data.stocks and not data.industries
+            )
             status = "empty" if empty else "success"
         except ToolFailure as exc:
             error = exc.error

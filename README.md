@@ -55,11 +55,11 @@ macOS / Linux 使用 .venv/bin/python 替换解释器路径。也可通过安装
 ## 生成数据与独立调用 Tool
 
 ```powershell
-.\.venv\Scripts\python.exe -m financial_agent seed-user-data
+.\.venv\Scripts\python.exe -m financial_agent generate-synthetic-data --overwrite
 .\.venv\Scripts\python.exe -m financial_agent list-tools
 ```
 
-默认生成 data/user_data.db。已有数据库时拒绝覆盖；需要重置时显式使用 `seed-user-data --overwrite`，或用 `--path` 指定路径。覆盖前停止使用该数据库的进程；生成器在同目录构建临时数据库再原子发布，首次发布需要文件系统支持 hard link。只读查询不会自动建库。
+正式 synthetic 数据库默认是 `data/synthetic-2000.db`，固定 seed 为 `20260910`；生成器会在同目录构建临时数据库后原子发布，显式 `--overwrite` 才会覆盖旧库。旧的 `seed-user-data` 仅保留为早期 fixture 命令，四个业务 Tool 使用 `generate-synthetic-data` 生成的数据库。
 
 在当前 PowerShell 进程环境中生成测试 key 和服务端权限映射：
 
@@ -69,20 +69,28 @@ $env:FINANCIAL_AGENT_USER_API_KEYS = ConvertTo-Json -Compress -Depth 4 -InputObj
     @{
         api_key = $env:FINANCIAL_AGENT_CALLER_API_KEY
         principal_id = 'synthetic-demo'
-        user_ids = @('syn-user-001', 'syn-user-002', 'syn-user-003', 'syn-user-004', 'syn-user-005', 'syn-user-006', 'syn-user-999')
-        scopes = @('read:profile', 'read:portfolio')
+        user_ids = @('syn-user-0001', 'syn-user-0002', 'syn-user-0003')
+        scopes = @('read:customer_context', 'read:margin_account', 'read:portfolio_positions', 'read:portfolio_analytics')
     }
 )
 
-.\.venv\Scripts\python.exe -m financial_agent call-tool get_user_profile --user-id syn-user-001
-.\.venv\Scripts\python.exe -m financial_agent call-tool get_user_portfolio --user-id syn-user-001
-.\.venv\Scripts\python.exe -m financial_agent call-tool get_user_transactions --user-id syn-user-001 --limit 2 --offset 0
-.\.venv\Scripts\python.exe -m financial_agent call-tool get_user_transactions --user-id syn-user-001 --start-time '2026-01-02T09:00:00Z' --end-time '2026-01-03T09:00:00Z'
+.\.venv\Scripts\python.exe -m financial_agent call-tool get_customer_context --user-id syn-user-0001
+.\.venv\Scripts\python.exe -m financial_agent call-tool get_margin_account --user-id syn-user-0001 --start-date 2026-05-01 --end-date 2026-06-30 --limit 60 --offset 0
+.\.venv\Scripts\python.exe -m financial_agent call-tool get_portfolio_positions --user-id syn-user-0001
+.\.venv\Scripts\python.exe -m financial_agent call-tool get_portfolio_analytics --user-id syn-user-0001
 ```
 
-FINANCIAL_AGENT_USER_API_KEYS 是宿主维护的 JSON 数组，条目字段为 api_key、principal_id、user_ids、scopes。默认 [] 拒绝全部访问；重复 key、非法配置和未知 scope 被拒绝。FINANCIAL_AGENT_CALLER_API_KEY 仅供 CLI 构造调用上下文，对应未来 HTTP 的 X-API-Key；当前没有 HTTP 服务。scopes 和白名单来自宿主配置，不能由 Agent 参数自报。
+FINANCIAL_AGENT_USER_API_KEYS 是宿主维护的 JSON 数组，条目字段为 api_key、principal_id、user_ids、scopes。默认 [] 拒绝全部访问；重复 key、非法配置和未知 scope 被拒绝。HTTP Client 从 FINANCIAL_AGENT_CALLER_API_KEY 读取调用 API Key，并通过 X-API-Key Header 发送；scopes 和白名单来自 Server 宿主配置，不能由 Agent 参数自报。
 
-路径变量 FINANCIAL_AGENT_USER_DB_PATH、FINANCIAL_AGENT_AUDIT_PATH 默认分别为 data/user_data.db、data/audit.jsonl，相对当前工作目录解析。FINANCIAL_AGENT_MODEL_API_KEY 仍为后续模型 adapter 预留。
+路径变量 FINANCIAL_AGENT_USER_DB_PATH、FINANCIAL_AGENT_AUDIT_PATH 默认分别为 data/synthetic-2000.db、data/audit.jsonl。HTTP Client 配置为 FINANCIAL_AGENT_USER_DATA_BASE_URL（默认 http://127.0.0.1:8000）和 FINANCIAL_AGENT_USER_DATA_TIMEOUT_SECONDS（默认 5 秒）。这些路径相对当前工作目录解析。
+
+启动本地 HTTP Server：
+
+```powershell
+.\.venv\Scripts\python.exe -m financial_agent serve-user-data
+```
+
+成功的 HTTP 响应直接返回业务领域模型；错误响应使用 transport 层 `ApiError`。Agent Tool 调用仍由 HTTP Client 转换为统一 `ToolResult`。Client 使用 `httpx.AsyncClient`，当前同步 ToolRegistry 通过明确的同步边界调用它，不执行自动重试。
 
 Python 直接调用（凭证仍来自环境配置）：
 
@@ -92,40 +100,41 @@ from financial_agent.user_data.auth import CallContext
 from financial_agent.user_data.runtime import build_user_tools
 
 settings = Settings()
-registry = build_user_tools(settings)
+registry = build_user_tools(settings)  # 通过本地 FastAPI 服务调用
 result = registry.invoke(
-    "get_user_portfolio",
-    {"user_id": "syn-user-001"},
+    "get_portfolio_positions",
+    {"user_id": "syn-user-0001"},
     context=CallContext(api_key=settings.caller_api_key),
 )
 print(result.model_dump_json())
 ```
 
+## Synthetic 业务语义
+
+数据集包含 2,000 个用户、60 个交易日和八类业务数据。archetype 只存在于生成器内部，最终数据库不保存 archetype、persona 或 user_type 标签。客户权限字段 `max_allowed_product_risk_level` 表示客户允许购买的最高产品风险等级，不是 API Key scope，也不是当前持仓风险。
+
+观察期假设没有外部入金/出金，因此 `portfolio_return = period_net_pnl / beginning_equity`。账本满足 `period_net_pnl = realized_pnl + ending_unrealized_pnl - beginning_unrealized_pnl - financing_interest - securities_lending_fee - transaction_fees - other_fees`。`beginning_unrealized_pnl` 是 synthetic accounting simplification 的汇总指标，不代表完整期初持仓快照。
+
+排名按 `region + asset_bucket` 组成 peer group；`return_rank`、`drawdown_rank`、`risk_adjusted_rank` 均为组内 competition ranking，rank 1 为最好，`peer_group_size` 为实际组大小。收益、回撤和风险调整收益均基于数据库实际保存值计算。
+
 ## 数据样本与访问边界
 
-| 用户 | 场景 |
-| --- | --- |
-| syn-user-001 | 多账户、多持仓、四笔交易，含相同成交时间与精确小数 |
-| syn-user-002 | 存在用户，无账户、持仓、交易 |
-| syn-user-003 | 有账户，无持仓、交易 |
-| syn-user-004 | 有持仓，无交易历史，模拟期初持仓 |
-| syn-user-005 | age_band / risk_level / region 为 null |
-| syn-user-006 | 已关闭账户，保留历史交易 |
-| syn-user-999 | 不存在；列入示例白名单，用于演示 404 |
+用户 ID 为 `syn-user-0001` 到 `syn-user-2000`。每个用户有客户上下文、两融账户快照、60 日 margin history、行业/个股持仓、收益风险指标、因子暴露和 peer-group 排名；不同用户的资产规模、杠杆、集中度、换手、持有期和风险表现由内部生成规则组合产生。
 
 身份、区域和证券标识都是 synthetic。users / accounts / holdings / transactions 四张表设置主键、外键和查询索引。金额、价格、数量存为十进制文本，读取为 Decimal，JSON 输出字符串；组合与交易声明 currency: CNY。这是固定快照，不是完整会计账本。
 
-调用路径为 ToolRegistry → UserDataService → UserDataRepository → SQLiteUserDataRepository。repository 使用只读连接和参数绑定，多次读取在同一读事务中完成。repository 是受信任的应用内部接口，不能绕过 service 暴露为 Agent Tool；SQLite 文件不承担操作系统级访问隔离。
+调用路径为 ToolRegistry → HttpUserDataClient → FastAPI → UserDataService → UserDataRepository → SQLiteUserDataRepository。Server 继续使用只读 repository 和参数绑定；repository 是受信任的应用内部接口，不能绕过 service 暴露为 Agent Tool。SQLite 文件不承担操作系统级访问隔离。
 
 ## Tool 契约与错误分类
 
 | Tool | 输入 | scope |
 | --- | --- | --- |
-| get_user_profile | user_id | read:profile |
-| get_user_portfolio | user_id | read:portfolio |
-| get_user_transactions | user_id、可选 start_time / end_time / limit / offset | read:portfolio |
+| get_customer_context | user_id | read:customer_context |
+| get_margin_account | user_id、可选 start_date / end_date / limit / offset | read:margin_account |
+| get_portfolio_positions | user_id | read:portfolio_positions |
+| get_portfolio_analytics | user_id | read:portfolio_analytics |
 
-拒绝未知输入字段与空 user_id。交易时间必须带时区，统一转换为 UTC；范围为 [start_time, end_time)，按 trade_time ASC、transaction_id ASC 排序。limit 默认 20、范围 1–100，offset 默认 0；页数据与 total 分开返回，翻过最后一页仍保留 total。
+拒绝未知输入字段与空 user_id。`get_margin_account` 的日期范围为 `[start_date, end_date)`，limit 默认 60、范围 1–366，offset 默认 0；页数据与 total 分开返回，翻过最后一页仍保留 total。
 
 ToolResult[T] 固定包含 status / data / source / latency / error / request_id：
 
@@ -153,6 +162,10 @@ ToolResult[T] 固定包含 status / data / source / latency / error / request_id
 
 每次调用尝试追加一条 JSONL 审计，记录 UTC 时间、请求 ID、工具、已验证身份、校验后的目标 ID、结果码和耗时。认证失败不记录身份，未知工具统一记录 unknown。不记录 key、完整参数或结果正文，错误消息不回显 SQL、路径和异常原文。审计写入失败时丢弃数据并返回 AUDIT_UNAVAILABLE；这次审计无法保证落盘。
 
+## HTTP 错误与审计
+
+HTTP API 不暴露 Agent `ToolResult`：成功响应是领域模型，失败响应是 `ApiError`。Client 将 401、403、404、422、5xx 以及 timeout/连接失败恢复为 Agent 层 `ToolResult`。每次 Client 调用生成 `X-Request-ID`，Server 将其用于业务 ToolResult 和 JSONL 审计；transport 错误仅通过日志记录，不伪造业务 AuditSink 事件。
+
 ## 测试/demo 故障序列
 
 正常 build_user_tools 不装配故障 hook。测试/demo 可显式构造服务（沿用上文 settings）：
@@ -175,13 +188,20 @@ registry = register_user_tools(UserDataService(
 
 使用上文 registry.invoke 连续调用，依次得到 504、429、503、真实查询结果；耗尽后持续正常查询。序列由该 service 的授权且参数合法的调用消费，跨工具共享。没有 sleep、随机失败、真实 deadline 或自动重试；故障不是 Tool 参数。
 
+默认 pytest 使用小规模 fixture；2,000 用户完整生成、可复现性和全库一致性属于 integration test：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pytest -q -m integration
+```
+
 ## 本机验证
 
 2026-09-09，Windows / Python 3.13.5：
 
 - Phase 0：15 个测试通过，模块与 CLI 自检成功。
 - Phase 1.1：106 个测试通过，包含全部 Phase 0 测试；pip check 无依赖冲突。
-- 覆盖三个 Tool 的成功、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
+- 覆盖四个业务 Tool、FastAPI endpoint、Async HTTP Client、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
 - 测试使用临时 SQLite、临时审计、synthetic 凭证，不使用 live provider。
 
 实际直接依赖版本：LangGraph 1.2.11、Pydantic 2.13.5、pydantic-settings 2.15.0、pytest 9.1.1。记录是本机验证结果，不是锁文件或用户阶段验收。
@@ -189,7 +209,7 @@ registry = register_user_tools(UserDataService(
 ## 当前能力
 
 - 可安装的 src-layout 包、配置校验、日志、CLI 和 pytest。
-- 六用户固定 SQLite fixtures、只读 repository adapter、服务层鉴权及三个独立 Tool。
+- 2,000 用户 synthetic SQLite、只读 repository adapter、服务层鉴权、四个业务 Tool，以及本地 FastAPI/Async HTTP Client 链路。
 - 用户白名单与 scopes、统一类型化结果、错误分类、JSONL 审计、可注入故障序列。
 
 ## 已知限制

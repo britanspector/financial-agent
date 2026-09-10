@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from financial_agent.schemas import Schema
 from financial_agent.user_data.auth import CallContext, Scope
@@ -38,5 +39,5 @@ class ToolRegistry:
             for spec in self._tools.values()
         ]
 
-    def invoke(self, name: str, arguments: object, *, context: CallContext) -> ToolResult:
-        return self._service.execute(self._tools.get(name), arguments, context=context)
+    def invoke(self, name: str, arguments: object, *, context: CallContext, request_id: UUID | None = None) -> ToolResult:
+        return self._service.execute(self._tools.get(name), arguments, context=context, request_id=request_id)
