@@ -2,6 +2,9 @@
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from uuid import UUID
+
+from pydantic import BaseModel
 
 from financial_agent.schemas import Schema
 from financial_agent.user_data.auth import CallContext, Scope
@@ -16,8 +19,8 @@ class ToolSpec:
     name: str
     description: str
     input_model: type[Schema]
-    output_model: type[Schema]
-    scope: Scope
+    output_model: type[BaseModel]
+    scope: Scope | None
     operation: str
 
 
@@ -38,5 +41,5 @@ class ToolRegistry:
             for spec in self._tools.values()
         ]
 
-    def invoke(self, name: str, arguments: object, *, context: CallContext) -> ToolResult:
-        return self._service.execute(self._tools.get(name), arguments, context=context)
+    def invoke(self, name: str, arguments: object, *, context: CallContext, request_id: UUID | None = None) -> ToolResult:
+        return self._service.execute(self._tools.get(name), arguments, context=context, request_id=request_id)

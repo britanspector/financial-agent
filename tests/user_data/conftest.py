@@ -4,9 +4,9 @@ import pytest
 
 from financial_agent.user_data.audit import JsonlAuditSink
 from financial_agent.user_data.auth import CallContext, Credential, CredentialStore
-from financial_agent.user_data.fixtures import seed_user_data
 from financial_agent.user_data.repository import SQLiteUserDataRepository
 from financial_agent.user_data.runtime import register_user_tools
+from financial_agent.user_data.synthetic_generator import generate_synthetic_data
 from financial_agent.user_data.service import UserDataService
 
 
@@ -15,22 +15,26 @@ class SpyRepository:
         self.repository = repository
         self.calls = []
 
-    def get_profile(self, user_id):
-        self.calls.append(("profile", user_id))
-        return self.repository.get_profile(user_id)
+    def get_customer_context(self, user_id):
+        self.calls.append(("customer_context", user_id))
+        return self.repository.get_customer_context(user_id)
 
-    def get_portfolio(self, user_id):
-        self.calls.append(("portfolio", user_id))
-        return self.repository.get_portfolio(user_id)
+    def get_margin_account(self, query):
+        self.calls.append(("margin_account", query.user_id))
+        return self.repository.get_margin_account(query)
 
-    def get_transactions(self, query):
-        self.calls.append(("transactions", query.user_id))
-        return self.repository.get_transactions(query)
+    def get_portfolio_positions(self, user_id):
+        self.calls.append(("portfolio_positions", user_id))
+        return self.repository.get_portfolio_positions(user_id)
+
+    def get_portfolio_analytics(self, user_id):
+        self.calls.append(("portfolio_analytics", user_id))
+        return self.repository.get_portfolio_analytics(user_id)
 
 
 @pytest.fixture
 def db_path(isolated_settings, tmp_path):
-    return seed_user_data(tmp_path / "user_data.db")
+    return generate_synthetic_data(tmp_path / "user_data.db", seed=20260910, user_count=20).path
 
 
 @pytest.fixture
@@ -42,16 +46,20 @@ def repository(db_path):
 def credentials():
     return CredentialStore([
         Credential(api_key="test-only-full-key", principal_id="synthetic-full",
-                   user_ids={f"syn-user-{i:03}" for i in range(1, 7)} | {"syn-user-999"},
-                   scopes={"read:profile", "read:portfolio"}),
-        Credential(api_key="test-only-profile-key", principal_id="synthetic-profile",
-                   user_ids={"syn-user-001"}, scopes={"read:profile"}),
-        Credential(api_key="test-only-portfolio-key", principal_id="synthetic-portfolio",
-                   user_ids={"syn-user-001"}, scopes={"read:portfolio"}),
+                   user_ids={f"syn-user-{i:04}" for i in range(1, 21)} | {"syn-user-999"},
+                   scopes={"read:customer_context", "read:margin_account", "read:portfolio_positions", "read:portfolio_analytics"}),
+        Credential(api_key="test-only-context-key", principal_id="synthetic-context",
+                   user_ids={"syn-user-0001"}, scopes={"read:customer_context"}),
+        Credential(api_key="test-only-margin-key", principal_id="synthetic-margin",
+                   user_ids={"syn-user-0001"}, scopes={"read:margin_account"}),
+        Credential(api_key="test-only-positions-key", principal_id="synthetic-positions",
+                   user_ids={"syn-user-0001"}, scopes={"read:portfolio_positions"}),
+        Credential(api_key="test-only-analytics-key", principal_id="synthetic-analytics",
+                   user_ids={"syn-user-0001"}, scopes={"read:portfolio_analytics"}),
         Credential(api_key="test-only-no-scope", principal_id="synthetic-no-scope",
                    user_ids={"syn-user-001"}, scopes=set()),
         Credential(api_key="test-only-other-user", principal_id="synthetic-other-user",
-                   user_ids={"syn-user-002"}, scopes={"read:profile", "read:portfolio"}),
+                   user_ids={"syn-user-0002"}, scopes={"read:customer_context", "read:margin_account", "read:portfolio_positions", "read:portfolio_analytics"}),
     ])
 
 

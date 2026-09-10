@@ -1,13 +1,14 @@
-"""Read-only, parameterized SQLite implementation of the repository contract."""
+"""Read-only, parameterized SQLite implementation for business Tool views."""
 
 from contextlib import contextmanager
-from datetime import timezone
 from pathlib import Path
 import sqlite3
 from typing import Protocol
 
 from financial_agent.user_data.models import (
-    Account, Holding, Portfolio, Profile, Transaction, TransactionPage, TransactionsInput,
+    CustomerContext, Factors, IndustryPosition, MarginAccount, MarginAccountInput, MarginDaily,
+    MarginInfo, PortfolioAnalytics, PortfolioPositions, ReportMetrics, StockPosition,
+    UserReturnRank,
 )
 
 
@@ -20,9 +21,10 @@ class RepositoryUnavailable(Exception):
 
 
 class UserDataRepository(Protocol):
-    def get_profile(self, user_id: str) -> Profile: ...
-    def get_portfolio(self, user_id: str) -> Portfolio: ...
-    def get_transactions(self, query: TransactionsInput) -> TransactionPage: ...
+    def get_customer_context(self, user_id: str) -> CustomerContext: ...
+    def get_margin_account(self, query: MarginAccountInput) -> MarginAccount: ...
+    def get_portfolio_positions(self, user_id: str) -> PortfolioPositions: ...
+    def get_portfolio_analytics(self, user_id: str) -> PortfolioAnalytics: ...
 
 
 class SQLiteUserDataRepository:
@@ -44,48 +46,86 @@ class SQLiteUserDataRepository:
             raise RepositoryUnavailable("Synthetic data store unavailable") from exc
 
     @staticmethod
-    def _profile(connection, user_id: str) -> Profile:
-        row = connection.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
-        if row is None:
+    def _require_user(connection: sqlite3.Connection, user_id: str) -> None:
+        if connection.execute("SELECT 1 FROM users WHERE user_id = ?", (user_id,)).fetchone() is None:
             raise UserNotFound()
-        return Profile.model_validate(dict(row))
 
-    def get_profile(self, user_id: str) -> Profile:
+    def get_customer_context(self, user_id: str) -> CustomerContext:
         with self._connect() as connection:
-            return self._profile(connection, user_id)
+            row = connection.execute("""
+                SELECT u.user_id, u.name_alias, u.age_band, u.risk_level, u.region,
+                       u.customer_tier, u.created_at, q.snapshot_date, q.asset_bucket,
+                       q.investable_asset, q.total_asset, q.cash_asset,
+                       q.risk_tolerance_score, q.investment_experience_years,
+                       q.investment_horizon, q.liquidity_need_score,
+                       q.active_trading_days_90d, q.trade_enabled, q.margin_enabled,
+                       q.short_selling_enabled, q.max_allowed_product_risk_level
+                FROM users u JOIN query_base_info q USING(user_id)
+                WHERE u.user_id = ?
+            """, (user_id,)).fetchone()
+            if row is None:
+                raise UserNotFound()
+            return CustomerContext.model_validate(dict(row))
 
-    def get_portfolio(self, user_id: str) -> Portfolio:
+    def get_margin_account(self, query: MarginAccountInput) -> MarginAccount:
         with self._connect() as connection:
-            self._profile(connection, user_id)
+            self._require_user(connection, query.user_id)
+            info_row = connection.execute("SELECT * FROM margin_info WHERE user_id = ?", (query.user_id,)).fetchone()
+            if info_row is None:
+                raise RepositoryUnavailable("Synthetic margin account unavailable")
+            clauses = ["user_id = ?"]
+            params: list[object] = [query.user_id]
+            if query.start_date is not None:
+                clauses.append("trade_date >= ?")
+                params.append(query.start_date.isoformat())
+            if query.end_date is not None:
+                clauses.append("trade_date < ?")
+                params.append(query.end_date.isoformat())
+            where = " AND ".join(clauses)
+            total = connection.execute(f"SELECT COUNT(*) FROM margin_daily WHERE {where}", params).fetchone()[0]
             rows = connection.execute(
-                "SELECT * FROM accounts WHERE user_id = ? ORDER BY account_id", (user_id,)
+                f"SELECT * FROM margin_daily WHERE {where} ORDER BY trade_date LIMIT ? OFFSET ?",
+                [*params, query.limit, query.offset],
             ).fetchall()
-            accounts = []
-            for row in rows:
-                holdings = connection.execute(
-                    "SELECT symbol, quantity, avg_cost, updated_at FROM holdings "
-                    "WHERE account_id = ? ORDER BY symbol", (row["account_id"],)
-                ).fetchall()
-                accounts.append(Account(**dict(row), holdings=[Holding(**dict(h)) for h in holdings]))
-            return Portfolio(user_id=user_id, accounts=accounts)
+            return MarginAccount(
+                user_id=query.user_id,
+                info=MarginInfo.model_validate(dict(info_row)),
+                daily=[MarginDaily.model_validate(dict(row)) for row in rows],
+                total=total,
+                limit=query.limit,
+                offset=query.offset,
+                start_date=query.start_date.isoformat() if query.start_date else None,
+                end_date=query.end_date.isoformat() if query.end_date else None,
+            )
 
-    def get_transactions(self, query: TransactionsInput) -> TransactionPage:
+    def get_portfolio_positions(self, user_id: str) -> PortfolioPositions:
         with self._connect() as connection:
-            self._profile(connection, query.user_id)
-            clauses = ["a.user_id = ?"]
-            parameters = [query.user_id]
-            for operator, value in ((">=", query.start_time), ("<", query.end_time)):
-                if value is not None:
-                    clauses.append(f"t.trade_time {operator} ?")
-                    parameters.append(value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
-            selection = " FROM transactions t JOIN accounts a ON t.account_id = a.account_id WHERE "
-            selection += " AND ".join(clauses)
-            total = connection.execute("SELECT COUNT(*)" + selection, parameters).fetchone()[0]
+            self._require_user(connection, user_id)
             rows = connection.execute(
-                "SELECT t.*" + selection + " ORDER BY t.trade_time, t.transaction_id LIMIT ? OFFSET ?",
-                [*parameters, query.limit, query.offset],
+                "SELECT * FROM industry_position WHERE user_id = ? ORDER BY position_rank, industry_code", (user_id,)
             ).fetchall()
-            return TransactionPage(
-                user_id=query.user_id, transactions=[Transaction(**dict(row)) for row in rows],
-                total=total, limit=query.limit, offset=query.offset,
+            stocks = connection.execute(
+                "SELECT * FROM stock_position WHERE user_id = ? ORDER BY weight DESC, stock_code", (user_id,)
+            ).fetchall()
+            snapshot = (rows[0]["snapshot_date"] if rows else stocks[0]["snapshot_date"] if stocks else None)
+            return PortfolioPositions(
+                user_id=user_id,
+                snapshot_date=snapshot or "",
+                industries=[IndustryPosition.model_validate(dict(row)) for row in rows],
+                stocks=[StockPosition.model_validate(dict(row)) for row in stocks],
+            )
+
+    def get_portfolio_analytics(self, user_id: str) -> PortfolioAnalytics:
+        with self._connect() as connection:
+            self._require_user(connection, user_id)
+            report = connection.execute("SELECT * FROM report_metrics WHERE user_id = ?", (user_id,)).fetchone()
+            factors = connection.execute("SELECT * FROM factors WHERE user_id = ?", (user_id,)).fetchone()
+            rank = connection.execute("SELECT * FROM user_return_rank WHERE user_id = ?", (user_id,)).fetchone()
+            if report is None or factors is None or rank is None:
+                raise RepositoryUnavailable("Synthetic analytics unavailable")
+            return PortfolioAnalytics(
+                user_id=user_id,
+                report=ReportMetrics.model_validate(dict(report)),
+                factors=Factors.model_validate(dict(factors)),
+                rank=UserReturnRank.model_validate(dict(rank)),
             )

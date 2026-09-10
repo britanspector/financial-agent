@@ -1,0 +1,230 @@
+"""Dependency-aware LangGraph execution driven by caller-supplied tasks."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import Any, Protocol
+from uuid import UUID, uuid4
+
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
+
+from financial_agent.agent.models import (
+    AgentError,
+    AgentState,
+    FinalResult,
+    Task,
+    TaskExecutionResult,
+)
+from financial_agent.schemas import UserQuery
+from financial_agent.tools.contracts import ToolError, ToolResult
+from financial_agent.user_data.auth import CallContext
+
+
+class ToolInvoker(Protocol):
+    def invoke(
+        self,
+        name: str,
+        arguments: object,
+        *,
+        context: CallContext,
+        request_id: UUID | None = None,
+    ) -> ToolResult: ...
+
+
+def build_execution_graph(registry: ToolInvoker, *, context: CallContext | None = None):
+    """Compile a graph whose plan is supplied as structured tasks."""
+    call_context = context or CallContext()
+
+    def dispatcher(raw_state: AgentState | Mapping[str, Any]) -> dict[str, Any]:
+        state = _state(raw_state)
+        completed = {item.task_id: item for item in state.tool_results}
+        pending = [task for task in state.tasks if task.task_id not in completed]
+        update: dict[str, Any] = {
+            "iteration_count": state.iteration_count + 1,
+            "scheduled_tasks": [],
+        }
+        if not pending:
+            update["dispatch_action"] = "finalize"
+            return update
+
+        failed_ids = {
+            task_id for task_id, item in completed.items() if item.result.status == "error"
+        }
+        task_ids = {task.task_id for task in state.tasks}
+        generated: list[TaskExecutionResult] = []
+
+        blocked = [task for task in pending if failed_ids.intersection(task.dependencies)]
+        for task in blocked:
+            generated.append(_control_error(
+                task,
+                code="DEPENDENCY_FAILED",
+                message="Task blocked because a dependency failed",
+            ))
+
+        blocked_ids = {item.task_id for item in generated}
+        remaining = [task for task in pending if task.task_id not in blocked_ids]
+        missing = [
+            task for task in remaining if any(dependency not in task_ids for dependency in task.dependencies)
+        ]
+        for task in missing:
+            absent = sorted(set(task.dependencies) - task_ids)
+            generated.append(_control_error(
+                task,
+                code="UNRESOLVED_DEPENDENCY",
+                message=f"missing_dependency: {', '.join(absent)}",
+            ))
+
+        generated_ids = {item.task_id for item in generated}
+        remaining = [task for task in remaining if task.task_id not in generated_ids]
+        successful_ids = {
+            task_id for task_id, item in completed.items() if item.result.status != "error"
+        }
+        ready = [task for task in remaining if set(task.dependencies).issubset(successful_ids)]
+
+        if generated:
+            update["tool_results"] = generated
+        if ready:
+            update["scheduled_tasks"] = ready
+            update["dispatch_action"] = "execute"
+        elif generated:
+            update["dispatch_action"] = "collect"
+        elif remaining:
+            update["tool_results"] = [
+                _control_error(
+                    task,
+                    code="UNRESOLVED_DEPENDENCY",
+                    message="cycle_or_deadlock: no dependency-ready task remains",
+                )
+                for task in remaining
+            ]
+            update["dispatch_action"] = "collect"
+        else:
+            update["dispatch_action"] = "collect"
+        return update
+
+    def route_dispatch(raw_state: AgentState | Mapping[str, Any]):
+        state = _state(raw_state)
+        if state.dispatch_action == "execute":
+            return [Send("execute_tool", {"task": task}) for task in state.scheduled_tasks]
+        if state.dispatch_action == "collect":
+            return "collect_results"
+        return "finalize"
+
+    def execute_tool(payload: Mapping[str, Any]) -> dict[str, list[TaskExecutionResult]]:
+        task = Task.model_validate(payload["task"])
+        result = registry.invoke(task.tool_name, task.arguments, context=call_context)
+        return {
+            "tool_results": [TaskExecutionResult(
+                task_id=task.task_id,
+                tool_name=task.tool_name,
+                result=result,
+            )],
+        }
+
+    def collect_results(raw_state: AgentState | Mapping[str, Any]) -> dict[str, Any]:
+        state = _state(raw_state)
+        new_results = state.tool_results[state.collected_result_count:]
+        new_errors = [error for item in new_results if (error := _agent_error(item)) is not None]
+        update: dict[str, Any] = {"collected_result_count": len(state.tool_results)}
+        if new_errors:
+            update["errors"] = new_errors
+        return update
+
+    def finalize(raw_state: AgentState | Mapping[str, Any]) -> dict[str, Any]:
+        state = _state(raw_state)
+        results_by_id = {item.task_id: item for item in state.tool_results}
+        errors_by_id = {item.task_id: item for item in state.errors}
+        ordered_results = [results_by_id[task.task_id] for task in state.tasks]
+        ordered_errors = [errors_by_id[task.task_id] for task in state.tasks if task.task_id in errors_by_id]
+        if not ordered_errors:
+            final_status = "success"
+        elif len(ordered_errors) == len(ordered_results):
+            final_status = "failed"
+        else:
+            final_status = "partial"
+        final = FinalResult(
+            status=final_status,
+            query=state.query,
+            task_results=ordered_results,
+            errors=ordered_errors,
+            iteration_count=state.iteration_count,
+        )
+        return {
+            "final_output": final,
+            "status": "failed" if final_status == "failed" else "completed",
+        }
+
+    builder = StateGraph(AgentState)
+    builder.add_node("dispatcher", dispatcher)
+    builder.add_node("execute_tool", execute_tool)
+    builder.add_node("collect_results", collect_results)
+    builder.add_node("finalize", finalize)
+    builder.add_edge(START, "dispatcher")
+    builder.add_conditional_edges("dispatcher", route_dispatch)
+    builder.add_edge("execute_tool", "collect_results")
+    builder.add_edge("collect_results", "dispatcher")
+    builder.add_edge("finalize", END)
+    return builder.compile()
+
+
+def run_execution_graph(
+    request: UserQuery,
+    tasks: Sequence[Task],
+    registry: ToolInvoker,
+    *,
+    context: CallContext | None = None,
+    max_concurrency: int | None = None,
+) -> AgentState:
+    """Execute a caller-supplied task graph and return its validated final state."""
+    state = AgentState.from_query(request, list(tasks))
+    config: dict[str, Any] = {"recursion_limit": max(25, len(tasks) * 4 + 5)}
+    if max_concurrency is not None:
+        if max_concurrency < 1:
+            raise ValueError("max_concurrency must be at least 1")
+        config["max_concurrency"] = max_concurrency
+    result = build_execution_graph(registry, context=context).invoke(state, config=config)
+    return AgentState.model_validate(result)
+
+
+def _state(raw_state: AgentState | Mapping[str, Any]) -> AgentState:
+    return raw_state if isinstance(raw_state, AgentState) else AgentState.model_validate(raw_state)
+
+
+def _control_error(task: Task, *, code: str, message: str) -> TaskExecutionResult:
+    return TaskExecutionResult(
+        task_id=task.task_id,
+        tool_name=task.tool_name,
+        result=ToolResult(
+            status="error",
+            data=None,
+            source="agent_control_plane",
+            latency=0,
+            error=ToolError(
+                code=code,
+                message=message,
+                http_status=424,
+                retryable=False,
+            ),
+            request_id=uuid4(),
+        ),
+    )
+
+
+def _agent_error(item: TaskExecutionResult) -> AgentError | None:
+    error = item.result.error
+    if error is None:
+        return None
+    reason = None
+    if error.code == "DEPENDENCY_FAILED":
+        reason = "dependency_failed"
+    elif error.code == "UNRESOLVED_DEPENDENCY":
+        reason = "missing_dependency" if error.message.startswith("missing_dependency:") else "cycle_or_deadlock"
+    return AgentError(
+        task_id=item.task_id,
+        code=error.code,
+        message=error.message,
+        http_status=error.http_status,
+        retryable=error.retryable,
+        reason=reason,
+    )

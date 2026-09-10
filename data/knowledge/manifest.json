@@ -1,0 +1,917 @@
+{
+  "schema_version": "0.1",
+  "documents": [
+    {
+      "document_id": "RR-CHMZ-20250310-01",
+      "path": "research_reports/RR-CHMZ-20250310-01.md",
+      "metadata": {
+        "document_id": "RR-CHMZ-20250310-01",
+        "source_type": "research_report",
+        "title": "澄海智造：2024A经营跟踪与展望",
+        "company": "澄海智造",
+        "broker": "甲辰证券研究所",
+        "publish_date": "2025-03-10",
+        "report_period": "2024A"
+      }
+    },
+    {
+      "document_id": "RR-CHMZ-20250826-02",
+      "path": "research_reports/RR-CHMZ-20250826-02.md",
+      "metadata": {
+        "document_id": "RR-CHMZ-20250826-02",
+        "source_type": "research_report",
+        "title": "澄海智造：2025H1经营跟踪与展望",
+        "company": "澄海智造",
+        "broker": "云岫证券研究所",
+        "publish_date": "2025-08-26",
+        "report_period": "2025H1"
+      }
+    },
+    {
+      "document_id": "RR-CHMZ-20260418-03",
+      "path": "research_reports/RR-CHMZ-20260418-03.md",
+      "metadata": {
+        "document_id": "RR-CHMZ-20260418-03",
+        "source_type": "research_report",
+        "title": "澄海智造：2025A/2026E经营跟踪与展望",
+        "company": "澄海智造",
+        "broker": "衡川证券研究所",
+        "publish_date": "2026-04-18",
+        "report_period": "2025A/2026E"
+      }
+    },
+    {
+      "document_id": "RR-YSHD-20250221-01",
+      "path": "research_reports/RR-YSHD-20250221-01.md",
+      "metadata": {
+        "document_id": "RR-YSHD-20250221-01",
+        "source_type": "research_report",
+        "title": "曜石半导体：2024Q4经营跟踪与展望",
+        "company": "曜石半导体",
+        "broker": "远澜证券研究所",
+        "publish_date": "2025-02-21",
+        "report_period": "2024Q4"
+      }
+    },
+    {
+      "document_id": "RR-YSHD-20250912-02",
+      "path": "research_reports/RR-YSHD-20250912-02.md",
+      "metadata": {
+        "document_id": "RR-YSHD-20250912-02",
+        "source_type": "research_report",
+        "title": "曜石半导体：2025H1经营跟踪与展望",
+        "company": "曜石半导体",
+        "broker": "甲辰证券研究所",
+        "publish_date": "2025-09-12",
+        "report_period": "2025H1"
+      }
+    },
+    {
+      "document_id": "RR-YSHD-20260508-03",
+      "path": "research_reports/RR-YSHD-20260508-03.md",
+      "metadata": {
+        "document_id": "RR-YSHD-20260508-03",
+        "source_type": "research_report",
+        "title": "曜石半导体：2025A/2026E经营跟踪与展望",
+        "company": "曜石半导体",
+        "broker": "云岫证券研究所",
+        "publish_date": "2026-05-08",
+        "report_period": "2025A/2026E"
+      }
+    },
+    {
+      "document_id": "RR-QHYY-20250403-01",
+      "path": "research_reports/RR-QHYY-20250403-01.md",
+      "metadata": {
+        "document_id": "RR-QHYY-20250403-01",
+        "source_type": "research_report",
+        "title": "青禾医药：2024A经营跟踪与展望",
+        "company": "青禾医药",
+        "broker": "衡川证券研究所",
+        "publish_date": "2025-04-03",
+        "report_period": "2024A"
+      }
+    },
+    {
+      "document_id": "RR-QHYY-20251020-02",
+      "path": "research_reports/RR-QHYY-20251020-02.md",
+      "metadata": {
+        "document_id": "RR-QHYY-20251020-02",
+        "source_type": "research_report",
+        "title": "青禾医药：2025Q3经营跟踪与展望",
+        "company": "青禾医药",
+        "broker": "远澜证券研究所",
+        "publish_date": "2025-10-20",
+        "report_period": "2025Q3"
+      }
+    },
+    {
+      "document_id": "RR-QHYY-20260611-03",
+      "path": "research_reports/RR-QHYY-20260611-03.md",
+      "metadata": {
+        "document_id": "RR-QHYY-20260611-03",
+        "source_type": "research_report",
+        "title": "青禾医药：2026H1E经营跟踪与展望",
+        "company": "青禾医药",
+        "broker": "甲辰证券研究所",
+        "publish_date": "2026-06-11",
+        "report_period": "2026H1E"
+      }
+    },
+    {
+      "document_id": "RR-YFRJ-20250328-01",
+      "path": "research_reports/RR-YFRJ-20250328-01.md",
+      "metadata": {
+        "document_id": "RR-YFRJ-20250328-01",
+        "source_type": "research_report",
+        "title": "云帆软件：2024A经营跟踪与展望",
+        "company": "云帆软件",
+        "broker": "云岫证券研究所",
+        "publish_date": "2025-03-28",
+        "report_period": "2024A"
+      }
+    },
+    {
+      "document_id": "RR-YFRJ-20250815-02",
+      "path": "research_reports/RR-YFRJ-20250815-02.md",
+      "metadata": {
+        "document_id": "RR-YFRJ-20250815-02",
+        "source_type": "research_report",
+        "title": "云帆软件：2025H1经营跟踪与展望",
+        "company": "云帆软件",
+        "broker": "衡川证券研究所",
+        "publish_date": "2025-08-15",
+        "report_period": "2025H1"
+      }
+    },
+    {
+      "document_id": "RR-YFRJ-20260330-03",
+      "path": "research_reports/RR-YFRJ-20260330-03.md",
+      "metadata": {
+        "document_id": "RR-YFRJ-20260330-03",
+        "source_type": "research_report",
+        "title": "云帆软件：2025A经营跟踪与展望",
+        "company": "云帆软件",
+        "broker": "远澜证券研究所",
+        "publish_date": "2026-03-30",
+        "report_period": "2025A"
+      }
+    },
+    {
+      "document_id": "RR-HYXNY-20250214-01",
+      "path": "research_reports/RR-HYXNY-20250214-01.md",
+      "metadata": {
+        "document_id": "RR-HYXNY-20250214-01",
+        "source_type": "research_report",
+        "title": "瀚源新能源：2024E经营跟踪与展望",
+        "company": "瀚源新能源",
+        "broker": "甲辰证券研究所",
+        "publish_date": "2025-02-14",
+        "report_period": "2024E"
+      }
+    },
+    {
+      "document_id": "RR-HYXNY-20250905-02",
+      "path": "research_reports/RR-HYXNY-20250905-02.md",
+      "metadata": {
+        "document_id": "RR-HYXNY-20250905-02",
+        "source_type": "research_report",
+        "title": "瀚源新能源：2025H1经营跟踪与展望",
+        "company": "瀚源新能源",
+        "broker": "远澜证券研究所",
+        "publish_date": "2025-09-05",
+        "report_period": "2025H1"
+      }
+    },
+    {
+      "document_id": "RR-HYXNY-20260429-03",
+      "path": "research_reports/RR-HYXNY-20260429-03.md",
+      "metadata": {
+        "document_id": "RR-HYXNY-20260429-03",
+        "source_type": "research_report",
+        "title": "瀚源新能源：2025A/2026E经营跟踪与展望",
+        "company": "瀚源新能源",
+        "broker": "衡川证券研究所",
+        "publish_date": "2026-04-29",
+        "report_period": "2025A/2026E"
+      }
+    },
+    {
+      "document_id": "RR-CLXF-20250418-01",
+      "path": "research_reports/RR-CLXF-20250418-01.md",
+      "metadata": {
+        "document_id": "RR-CLXF-20250418-01",
+        "source_type": "research_report",
+        "title": "沧澜消费：2024A经营跟踪与展望",
+        "company": "沧澜消费",
+        "broker": "远澜证券研究所",
+        "publish_date": "2025-04-18",
+        "report_period": "2024A"
+      }
+    },
+    {
+      "document_id": "RR-CLXF-20251107-02",
+      "path": "research_reports/RR-CLXF-20251107-02.md",
+      "metadata": {
+        "document_id": "RR-CLXF-20251107-02",
+        "source_type": "research_report",
+        "title": "沧澜消费：2025Q3经营跟踪与展望",
+        "company": "沧澜消费",
+        "broker": "云岫证券研究所",
+        "publish_date": "2025-11-07",
+        "report_period": "2025Q3"
+      }
+    },
+    {
+      "document_id": "RR-CLXF-20260716-03",
+      "path": "research_reports/RR-CLXF-20260716-03.md",
+      "metadata": {
+        "document_id": "RR-CLXF-20260716-03",
+        "source_type": "research_report",
+        "title": "沧澜消费：2026H1经营跟踪与展望",
+        "company": "沧澜消费",
+        "broker": "甲辰证券研究所",
+        "publish_date": "2026-07-16",
+        "report_period": "2026H1"
+      }
+    },
+    {
+      "document_id": "RR-YULL-20250305-01",
+      "path": "research_reports/RR-YULL-20250305-01.md",
+      "metadata": {
+        "document_id": "RR-YULL-20250305-01",
+        "source_type": "research_report",
+        "title": "远陆物流：2024A经营跟踪与展望",
+        "company": "远陆物流",
+        "broker": "衡川证券研究所",
+        "publish_date": "2025-03-05",
+        "report_period": "2024A"
+      }
+    },
+    {
+      "document_id": "RR-YULL-20250829-02",
+      "path": "research_reports/RR-YULL-20250829-02.md",
+      "metadata": {
+        "document_id": "RR-YULL-20250829-02",
+        "source_type": "research_report",
+        "title": "远陆物流：2025H1经营跟踪与展望",
+        "company": "远陆物流",
+        "broker": "甲辰证券研究所",
+        "publish_date": "2025-08-29",
+        "report_period": "2025H1"
+      }
+    },
+    {
+      "document_id": "RR-YULL-20260522-03",
+      "path": "research_reports/RR-YULL-20260522-03.md",
+      "metadata": {
+        "document_id": "RR-YULL-20260522-03",
+        "source_type": "research_report",
+        "title": "远陆物流：2025A/2026E经营跟踪与展望",
+        "company": "远陆物流",
+        "broker": "云岫证券研究所",
+        "publish_date": "2026-05-22",
+        "report_period": "2025A/2026E"
+      }
+    },
+    {
+      "document_id": "RR-AYYH-20250425-01",
+      "path": "research_reports/RR-AYYH-20250425-01.md",
+      "metadata": {
+        "document_id": "RR-AYYH-20250425-01",
+        "source_type": "research_report",
+        "title": "安岳银行：2024A经营跟踪与展望",
+        "company": "安岳银行",
+        "broker": "云岫证券研究所",
+        "publish_date": "2025-04-25",
+        "report_period": "2024A"
+      }
+    },
+    {
+      "document_id": "RR-AYYH-20251031-02",
+      "path": "research_reports/RR-AYYH-20251031-02.md",
+      "metadata": {
+        "document_id": "RR-AYYH-20251031-02",
+        "source_type": "research_report",
+        "title": "安岳银行：2025Q3经营跟踪与展望",
+        "company": "安岳银行",
+        "broker": "衡川证券研究所",
+        "publish_date": "2025-10-31",
+        "report_period": "2025Q3"
+      }
+    },
+    {
+      "document_id": "RR-AYYH-20260626-03",
+      "path": "research_reports/RR-AYYH-20260626-03.md",
+      "metadata": {
+        "document_id": "RR-AYYH-20260626-03",
+        "source_type": "research_report",
+        "title": "安岳银行：2026H1E经营跟踪与展望",
+        "company": "安岳银行",
+        "broker": "远澜证券研究所",
+        "publish_date": "2026-06-26",
+        "report_period": "2026H1E"
+      }
+    },
+    {
+      "document_id": "FAQ-ACCOUNT-OPEN-V1",
+      "path": "faq/FAQ-ACCOUNT-OPEN-V1.md",
+      "metadata": {
+        "document_id": "FAQ-ACCOUNT-OPEN-V1",
+        "source_type": "faq",
+        "title": "开户需要满足哪些基本条件？",
+        "category": "account",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-ACCOUNT-REVIEW-V1",
+      "path": "faq/FAQ-ACCOUNT-REVIEW-V1.md",
+      "metadata": {
+        "document_id": "FAQ-ACCOUNT-REVIEW-V1",
+        "source_type": "faq",
+        "title": "开户申请一直显示审核中怎么办？",
+        "category": "account",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-ACCOUNT-CERT-V1",
+      "path": "faq/FAQ-ACCOUNT-CERT-V1.md",
+      "metadata": {
+        "document_id": "FAQ-ACCOUNT-CERT-V1",
+        "source_type": "faq",
+        "title": "身份证过期后账户还能交易吗？",
+        "category": "account",
+        "version": "1.0",
+        "effective_date": "2025-06-01"
+      }
+    },
+    {
+      "document_id": "FAQ-ACCOUNT-LOCK-V1",
+      "path": "faq/FAQ-ACCOUNT-LOCK-V1.md",
+      "metadata": {
+        "document_id": "FAQ-ACCOUNT-LOCK-V1",
+        "source_type": "faq",
+        "title": "交易密码输错被锁怎么办？",
+        "category": "account",
+        "version": "2.0",
+        "effective_date": "2026-01-05"
+      }
+    },
+    {
+      "document_id": "FAQ-ACCOUNT-CLOSE-V1",
+      "path": "faq/FAQ-ACCOUNT-CLOSE-V1.md",
+      "metadata": {
+        "document_id": "FAQ-ACCOUNT-CLOSE-V1",
+        "source_type": "faq",
+        "title": "销户前需要处理哪些事项？",
+        "category": "account",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-TRADING-CANCEL-V1",
+      "path": "faq/FAQ-TRADING-CANCEL-V1.md",
+      "metadata": {
+        "document_id": "FAQ-TRADING-CANCEL-V1",
+        "source_type": "faq",
+        "title": "委托提交后都可以撤单吗？",
+        "category": "trading",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-TRADING-LIMIT-V1",
+      "path": "faq/FAQ-TRADING-LIMIT-V1.md",
+      "metadata": {
+        "document_id": "FAQ-TRADING-LIMIT-V1",
+        "source_type": "faq",
+        "title": "价格超过涨跌幅限制为什么不能申报？",
+        "category": "trading",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-TRADING-MARKET-V1",
+      "path": "faq/FAQ-TRADING-MARKET-V1.md",
+      "metadata": {
+        "document_id": "FAQ-TRADING-MARKET-V1",
+        "source_type": "faq",
+        "title": "市价委托是否一定按当前显示价格成交？",
+        "category": "trading",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-TRADING-FUNDS-V1",
+      "path": "faq/FAQ-TRADING-FUNDS-V1.md",
+      "metadata": {
+        "document_id": "FAQ-TRADING-FUNDS-V1",
+        "source_type": "faq",
+        "title": "卖出股票后资金何时可以使用？",
+        "category": "trading",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-TRADING-FUNDS-V2",
+      "path": "faq/FAQ-TRADING-FUNDS-V2.md",
+      "metadata": {
+        "document_id": "FAQ-TRADING-FUNDS-V2",
+        "source_type": "faq",
+        "title": "卖出股票后资金何时可以转出？",
+        "category": "trading",
+        "version": "2.0",
+        "effective_date": "2026-01-05"
+      }
+    },
+    {
+      "document_id": "FAQ-TRADING-ODDLOT-V1",
+      "path": "faq/FAQ-TRADING-ODDLOT-V1.md",
+      "metadata": {
+        "document_id": "FAQ-TRADING-ODDLOT-V1",
+        "source_type": "faq",
+        "title": "不足一手的零股如何卖出？",
+        "category": "trading",
+        "version": "1.0",
+        "effective_date": "2025-03-17"
+      }
+    },
+    {
+      "document_id": "FAQ-MARGIN-ELIGIBLE-V1",
+      "path": "faq/FAQ-MARGIN-ELIGIBLE-V1.md",
+      "metadata": {
+        "document_id": "FAQ-MARGIN-ELIGIBLE-V1",
+        "source_type": "faq",
+        "title": "哪些证券可以作为两融标的？",
+        "category": "margin",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-MARGIN-COLLATERAL-V1",
+      "path": "faq/FAQ-MARGIN-COLLATERAL-V1.md",
+      "metadata": {
+        "document_id": "FAQ-MARGIN-COLLATERAL-V1",
+        "source_type": "faq",
+        "title": "所有持仓都能作为两融担保品吗？",
+        "category": "margin",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-MARGIN-MAINTAIN-V1",
+      "path": "faq/FAQ-MARGIN-MAINTAIN-V1.md",
+      "metadata": {
+        "document_id": "FAQ-MARGIN-MAINTAIN-V1",
+        "source_type": "faq",
+        "title": "维持担保比例低于预警线怎么办？",
+        "category": "margin",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-MARGIN-MAINTAIN-V2",
+      "path": "faq/FAQ-MARGIN-MAINTAIN-V2.md",
+      "metadata": {
+        "document_id": "FAQ-MARGIN-MAINTAIN-V2",
+        "source_type": "faq",
+        "title": "什么情况下两融账户会被强制平仓？",
+        "category": "margin",
+        "version": "2.0",
+        "effective_date": "2026-03-01"
+      }
+    },
+    {
+      "document_id": "FAQ-MARGIN-INTEREST-V1",
+      "path": "faq/FAQ-MARGIN-INTEREST-V1.md",
+      "metadata": {
+        "document_id": "FAQ-MARGIN-INTEREST-V1",
+        "source_type": "faq",
+        "title": "融资利息从什么时候开始计算？",
+        "category": "margin",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-FEATURE-ALERT-V1",
+      "path": "faq/FAQ-FEATURE-ALERT-V1.md",
+      "metadata": {
+        "document_id": "FAQ-FEATURE-ALERT-V1",
+        "source_type": "faq",
+        "title": "价格提醒触发后会自动下单吗？",
+        "category": "product_feature",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-FEATURE-CONDITION-V1",
+      "path": "faq/FAQ-FEATURE-CONDITION-V1.md",
+      "metadata": {
+        "document_id": "FAQ-FEATURE-CONDITION-V1",
+        "source_type": "faq",
+        "title": "条件单触发后是否一定成交？",
+        "category": "product_feature",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-FEATURE-CONDITION-V2",
+      "path": "faq/FAQ-FEATURE-CONDITION-V2.md",
+      "metadata": {
+        "document_id": "FAQ-FEATURE-CONDITION-V2",
+        "source_type": "faq",
+        "title": "新版条件单支持哪些有效期？",
+        "category": "product_feature",
+        "version": "2.0",
+        "effective_date": "2026-02-09"
+      }
+    },
+    {
+      "document_id": "FAQ-FEATURE-STATEMENT-V1",
+      "path": "faq/FAQ-FEATURE-STATEMENT-V1.md",
+      "metadata": {
+        "document_id": "FAQ-FEATURE-STATEMENT-V1",
+        "source_type": "faq",
+        "title": "如何导出历史对账单？",
+        "category": "product_feature",
+        "version": "1.0",
+        "effective_date": "2025-04-01"
+      }
+    },
+    {
+      "document_id": "FAQ-RISK-SUITABILITY-V1",
+      "path": "faq/FAQ-RISK-SUITABILITY-V1.md",
+      "metadata": {
+        "document_id": "FAQ-RISK-SUITABILITY-V1",
+        "source_type": "faq",
+        "title": "风险等级不匹配时可以买产品吗？",
+        "category": "risk_notice",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-RISK-LEVERAGE-V1",
+      "path": "faq/FAQ-RISK-LEVERAGE-V1.md",
+      "metadata": {
+        "document_id": "FAQ-RISK-LEVERAGE-V1",
+        "source_type": "faq",
+        "title": "融资交易为什么会放大亏损？",
+        "category": "risk_notice",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "FAQ-RISK-MARKET-V1",
+      "path": "faq/FAQ-RISK-MARKET-V1.md",
+      "metadata": {
+        "document_id": "FAQ-RISK-MARKET-V1",
+        "source_type": "faq",
+        "title": "流动性较差时使用市价委托有什么风险？",
+        "category": "risk_notice",
+        "version": "1.0",
+        "effective_date": "2025-07-14"
+      }
+    },
+    {
+      "document_id": "FAQ-RISK-HISTORY-V1",
+      "path": "faq/FAQ-RISK-HISTORY-V1.md",
+      "metadata": {
+        "document_id": "FAQ-RISK-HISTORY-V1",
+        "source_type": "faq",
+        "title": "历史收益较高是否代表未来也会盈利？",
+        "category": "risk_notice",
+        "version": "1.0",
+        "effective_date": "2025-01-01"
+      }
+    },
+    {
+      "document_id": "AP-CHMZ-EARNINGS-20250715",
+      "path": "announcements_policies/AP-CHMZ-EARNINGS-20250715.md",
+      "metadata": {
+        "document_id": "AP-CHMZ-EARNINGS-20250715",
+        "source_type": "announcement_policy",
+        "title": "澄海智造2025年半年度业绩预告",
+        "issuer": "澄海智造",
+        "publish_date": "2025-07-15",
+        "effective_date": "2025-07-15",
+        "status": "superseded"
+      }
+    },
+    {
+      "document_id": "AP-CHMZ-EARNINGS-20250802",
+      "path": "announcements_policies/AP-CHMZ-EARNINGS-20250802.md",
+      "metadata": {
+        "document_id": "AP-CHMZ-EARNINGS-20250802",
+        "source_type": "announcement_policy",
+        "title": "澄海智造2025年半年度业绩预告更正公告",
+        "issuer": "澄海智造",
+        "publish_date": "2025-08-02",
+        "effective_date": "2025-08-02",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-YSHD-BUYBACK-20250606",
+      "path": "announcements_policies/AP-YSHD-BUYBACK-20250606.md",
+      "metadata": {
+        "document_id": "AP-YSHD-BUYBACK-20250606",
+        "source_type": "announcement_policy",
+        "title": "曜石半导体股份回购方案",
+        "issuer": "曜石半导体",
+        "publish_date": "2025-06-06",
+        "effective_date": "2025-06-10",
+        "status": "superseded"
+      }
+    },
+    {
+      "document_id": "AP-YSHD-BUYBACK-20250918",
+      "path": "announcements_policies/AP-YSHD-BUYBACK-20250918.md",
+      "metadata": {
+        "document_id": "AP-YSHD-BUYBACK-20250918",
+        "source_type": "announcement_policy",
+        "title": "曜石半导体股份回购方案调整公告",
+        "issuer": "曜石半导体",
+        "publish_date": "2025-09-18",
+        "effective_date": "2025-09-22",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-QHYY-TRIAL-20250808",
+      "path": "announcements_policies/AP-QHYY-TRIAL-20250808.md",
+      "metadata": {
+        "document_id": "AP-QHYY-TRIAL-20250808",
+        "source_type": "announcement_policy",
+        "title": "青禾医药核心管线临床试验进展公告",
+        "issuer": "青禾医药",
+        "publish_date": "2025-08-08",
+        "effective_date": "2025-08-08",
+        "status": "superseded"
+      }
+    },
+    {
+      "document_id": "AP-QHYY-TRIAL-20260220",
+      "path": "announcements_policies/AP-QHYY-TRIAL-20260220.md",
+      "metadata": {
+        "document_id": "AP-QHYY-TRIAL-20260220",
+        "source_type": "announcement_policy",
+        "title": "青禾医药关于终止QH-201原适应症试验的公告",
+        "issuer": "青禾医药",
+        "publish_date": "2026-02-20",
+        "effective_date": "2026-02-20",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-YFRJ-RENEWAL-20260312",
+      "path": "announcements_policies/AP-YFRJ-RENEWAL-20260312.md",
+      "metadata": {
+        "document_id": "AP-YFRJ-RENEWAL-20260312",
+        "source_type": "announcement_policy",
+        "title": "云帆软件关于订阅客户续费情况的自愿性公告",
+        "issuer": "云帆软件",
+        "publish_date": "2026-03-12",
+        "effective_date": "2026-03-12",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-HYXNY-CONTRACT-20251121",
+      "path": "announcements_policies/AP-HYXNY-CONTRACT-20251121.md",
+      "metadata": {
+        "document_id": "AP-HYXNY-CONTRACT-20251121",
+        "source_type": "announcement_policy",
+        "title": "瀚源新能源海外储能项目重大合同公告",
+        "issuer": "瀚源新能源",
+        "publish_date": "2025-11-21",
+        "effective_date": "2025-12-01",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-CLXF-INVENTORY-20260116",
+      "path": "announcements_policies/AP-CLXF-INVENTORY-20260116.md",
+      "metadata": {
+        "document_id": "AP-CLXF-INVENTORY-20260116",
+        "source_type": "announcement_policy",
+        "title": "沧澜消费关于渠道库存情况的说明公告",
+        "issuer": "沧澜消费",
+        "publish_date": "2026-01-16",
+        "effective_date": "2026-01-16",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-YULL-FREIGHT-20250530",
+      "path": "announcements_policies/AP-YULL-FREIGHT-20250530.md",
+      "metadata": {
+        "document_id": "AP-YULL-FREIGHT-20250530",
+        "source_type": "announcement_policy",
+        "title": "远陆物流干线运输价格调整公告",
+        "issuer": "远陆物流",
+        "publish_date": "2025-05-30",
+        "effective_date": "2025-06-15",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-AYYH-CAPITAL-20260410",
+      "path": "announcements_policies/AP-AYYH-CAPITAL-20260410.md",
+      "metadata": {
+        "document_id": "AP-AYYH-CAPITAL-20260410",
+        "source_type": "announcement_policy",
+        "title": "安岳银行资本补充工具发行完成公告",
+        "issuer": "安岳银行",
+        "publish_date": "2026-04-10",
+        "effective_date": "2026-04-10",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-CHMZ-DIVIDEND-20260425",
+      "path": "announcements_policies/AP-CHMZ-DIVIDEND-20260425.md",
+      "metadata": {
+        "document_id": "AP-CHMZ-DIVIDEND-20260425",
+        "source_type": "announcement_policy",
+        "title": "澄海智造2025年度利润分配公告",
+        "issuer": "澄海智造",
+        "publish_date": "2026-04-25",
+        "effective_date": "2026-05-20",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-TRADING-PRICE-202401",
+      "path": "announcements_policies/AP-TRADING-PRICE-202401.md",
+      "metadata": {
+        "document_id": "AP-TRADING-PRICE-202401",
+        "source_type": "announcement_policy",
+        "title": "证券价格涨跌幅交易规则（2024版）",
+        "issuer": "东衡证券交易所",
+        "publish_date": "2023-12-15",
+        "effective_date": "2024-01-01",
+        "status": "superseded"
+      }
+    },
+    {
+      "document_id": "AP-TRADING-PRICE-202601",
+      "path": "announcements_policies/AP-TRADING-PRICE-202601.md",
+      "metadata": {
+        "document_id": "AP-TRADING-PRICE-202601",
+        "source_type": "announcement_policy",
+        "title": "关于修订证券价格涨跌幅交易规则的通知",
+        "issuer": "东衡证券交易所",
+        "publish_date": "2026-02-12",
+        "effective_date": "2026-03-01",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-TRADING-AFTERHOURS-202401",
+      "path": "announcements_policies/AP-TRADING-AFTERHOURS-202401.md",
+      "metadata": {
+        "document_id": "AP-TRADING-AFTERHOURS-202401",
+        "source_type": "announcement_policy",
+        "title": "盘后固定价格交易实施细则（试行）",
+        "issuer": "东衡证券交易所",
+        "publish_date": "2024-04-01",
+        "effective_date": "2024-05-01",
+        "status": "superseded"
+      }
+    },
+    {
+      "document_id": "AP-TRADING-AFTERHOURS-202601",
+      "path": "announcements_policies/AP-TRADING-AFTERHOURS-202601.md",
+      "metadata": {
+        "document_id": "AP-TRADING-AFTERHOURS-202601",
+        "source_type": "announcement_policy",
+        "title": "盘后固定价格交易实施细则（2026修订）",
+        "issuer": "东衡证券交易所",
+        "publish_date": "2026-01-20",
+        "effective_date": "2026-02-09",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-TRADING-ABNORMAL-202401",
+      "path": "announcements_policies/AP-TRADING-ABNORMAL-202401.md",
+      "metadata": {
+        "document_id": "AP-TRADING-ABNORMAL-202401",
+        "source_type": "announcement_policy",
+        "title": "异常交易行为监控指引（2024版）",
+        "issuer": "东衡证券交易所",
+        "publish_date": "2024-06-12",
+        "effective_date": "2024-07-01",
+        "status": "expired"
+      }
+    },
+    {
+      "document_id": "AP-TRADING-ABNORMAL-202601",
+      "path": "announcements_policies/AP-TRADING-ABNORMAL-202601.md",
+      "metadata": {
+        "document_id": "AP-TRADING-ABNORMAL-202601",
+        "source_type": "announcement_policy",
+        "title": "异常交易行为监控指引（2026版）",
+        "issuer": "东衡证券交易所",
+        "publish_date": "2025-12-10",
+        "effective_date": "2026-01-01",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-MARGIN-RATIO-202401",
+      "path": "announcements_policies/AP-MARGIN-RATIO-202401.md",
+      "metadata": {
+        "document_id": "AP-MARGIN-RATIO-202401",
+        "source_type": "announcement_policy",
+        "title": "融资交易最低保证金比例规则（2024版）",
+        "issuer": "中证融资服务中心",
+        "publish_date": "2023-12-20",
+        "effective_date": "2024-01-01",
+        "status": "superseded"
+      }
+    },
+    {
+      "document_id": "AP-MARGIN-RATIO-202601",
+      "path": "announcements_policies/AP-MARGIN-RATIO-202601.md",
+      "metadata": {
+        "document_id": "AP-MARGIN-RATIO-202601",
+        "source_type": "announcement_policy",
+        "title": "关于调整融资交易最低保证金比例的通知",
+        "issuer": "中证融资服务中心",
+        "publish_date": "2026-02-10",
+        "effective_date": "2026-03-01",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-MARGIN-HAIRCUT-202401",
+      "path": "announcements_policies/AP-MARGIN-HAIRCUT-202401.md",
+      "metadata": {
+        "document_id": "AP-MARGIN-HAIRCUT-202401",
+        "source_type": "announcement_policy",
+        "title": "可充抵保证金证券折算率管理规则（2024版）",
+        "issuer": "东衡证券交易所",
+        "publish_date": "2024-02-01",
+        "effective_date": "2024-03-01",
+        "status": "superseded"
+      }
+    },
+    {
+      "document_id": "AP-MARGIN-HAIRCUT-202601",
+      "path": "announcements_policies/AP-MARGIN-HAIRCUT-202601.md",
+      "metadata": {
+        "document_id": "AP-MARGIN-HAIRCUT-202601",
+        "source_type": "announcement_policy",
+        "title": "可充抵保证金证券折算率管理规则（2026修订）",
+        "issuer": "东衡证券交易所",
+        "publish_date": "2026-03-01",
+        "effective_date": "2026-04-01",
+        "status": "active"
+      }
+    },
+    {
+      "document_id": "AP-MARGIN-LIQUIDATION-202401",
+      "path": "announcements_policies/AP-MARGIN-LIQUIDATION-202401.md",
+      "metadata": {
+        "document_id": "AP-MARGIN-LIQUIDATION-202401",
+        "source_type": "announcement_policy",
+        "title": "两融账户预警与处置规则（2024版）",
+        "issuer": "中证融资服务中心",
+        "publish_date": "2024-01-05",
+        "effective_date": "2024-02-01",
+        "status": "superseded"
+      }
+    },
+    {
+      "document_id": "AP-MARGIN-LIQUIDATION-202601",
+      "path": "announcements_policies/AP-MARGIN-LIQUIDATION-202601.md",
+      "metadata": {
+        "document_id": "AP-MARGIN-LIQUIDATION-202601",
+        "source_type": "announcement_policy",
+        "title": "两融账户预警与强制平仓处置规则（2026版）",
+        "issuer": "中证融资服务中心",
+        "publish_date": "2026-01-15",
+        "effective_date": "2026-03-01",
+        "status": "active"
+      }
+    }
+  ]
+}

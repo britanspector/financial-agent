@@ -8,7 +8,12 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
 
 from financial_agent.tools.contracts import ToolFailure
 
-Scope = Literal["read:profile", "read:portfolio"]
+Scope = Literal[
+    "read:customer_context",
+    "read:margin_account",
+    "read:portfolio_positions",
+    "read:portfolio_analytics",
+]
 
 
 class Credential(BaseModel):

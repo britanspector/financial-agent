@@ -12,6 +12,11 @@ dependencies = [
     "langgraph>=1.0,<2",
     "pydantic>=2.10,<3",
     "pydantic-settings>=2.7,<3",
+    "fastapi>=0.115,<1",
+    "httpx[socks]>=0.27,<1",
+    "jieba>=0.42,<1",
+    "numpy>=2,<3",
+    "uvicorn>=0.30,<1",
 ]
 
 [project.optional-dependencies]
@@ -25,4 +30,8 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers -m 'not integration and not live'"
+markers = [
+    "integration: full 2,000-user generation and database validation",
+    "live: tests that call a real external data service",
+]
