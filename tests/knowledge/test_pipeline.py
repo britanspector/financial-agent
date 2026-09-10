@@ -143,6 +143,21 @@ def test_regulatory_and_business_filters():
     assert all(item.metadata.effective_date.isoformat() <= "2025-12-31" for item in business)
 
 
+def test_bb01_current_regulatory_search_excludes_inactive_versions():
+    retriever, _ = make_retriever()
+
+    current = retriever.search_regulatory(RegulatorySearchInput(query="当前融资交易最低保证金比例是多少？"))
+    historical = retriever.search_regulatory(RegulatorySearchInput(
+        query="融资买入最低保证金比例", as_of="2025-06-01",
+    ))
+
+    assert current
+    assert all(item.metadata.status == "active" for item in current)
+    assert any(item.document_id == "AP-MARGIN-RATIO-202601" for item in current)
+    assert all(item.document_id != "AP-MARGIN-RATIO-202401" for item in current)
+    assert any(item.metadata.status == "superseded" for item in historical)
+
+
 def test_three_tool_contracts_return_only_evidence_lists():
     retriever, _ = make_retriever()
     registry = register_rag_tools(KnowledgeRetrievalService(retriever))

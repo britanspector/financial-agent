@@ -51,7 +51,10 @@ def main() -> int:
     logger = configure_logging(settings.log_level)
     if args.command == "serve-user-data":
         import uvicorn
-        uvicorn.run(create_app(settings), host=args.host, port=args.port, log_level=settings.log_level.lower())
+        uvicorn.run(
+            create_app(settings), host=args.host, port=args.port,
+            log_level=settings.log_level.lower(), access_log=False,
+        )
         return 0
     if args.command == "seed-user-data":
         try:

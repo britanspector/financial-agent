@@ -1,4 +1,5 @@
 import json
+import logging
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -77,3 +78,29 @@ def test_api_scope_and_margin_query(db_path, tmp_path):
     assert response.status_code == 200
     assert len(response.json()["daily"]) == 3
     assert response.json()["total"] == 8
+
+
+def test_api_rejects_unknown_query_parameters_without_logging_values(db_path, tmp_path, caplog):
+    client, key, _ = make_client(db_path, tmp_path)
+    request_id = str(uuid4())
+    secret_value = "sensitive-query-value"
+    paths = [
+        "/v1/customers/syn-user-0001/context",
+        "/v1/customers/syn-user-0001/margin-account?limit=1",
+        "/v1/customers/syn-user-0001/portfolio/positions",
+        "/v1/customers/syn-user-0001/portfolio/analytics",
+    ]
+
+    with caplog.at_level(logging.INFO, logger="financial_agent.user_data.api"):
+        for path in paths:
+            separator = "&" if "?" in path else "?"
+            response = client.get(
+                f"{path}{separator}unknown={secret_value}",
+                headers={"X-API-Key": key, "X-Request-ID": request_id},
+            )
+            assert response.status_code == 422
+            assert response.json()["code"] == "INVALID_ARGUMENT"
+            assert response.headers["X-Request-ID"] == request_id
+
+    assert request_id in caplog.text
+    assert secret_value not in caplog.text

@@ -248,7 +248,7 @@ $env:FINANCIAL_AGENT_QWEN_API_KEY = "<your-key>"
 | Tool | filters |
 | --- | --- |
 | `search_research_reports` | `companies`、`brokers`、`as_of`（publish_date 上界） |
-| `search_regulatory_knowledge` | `issuer`、`as_of`（publish/effective date 上界） |
+| `search_regulatory_knowledge` | `issuer`、`as_of`（省略时仅当前 active；指定时按 publish/effective date 上界） |
 | `search_business_knowledge` | `category`、`as_of`（effective_date 上界） |
 
 ```powershell

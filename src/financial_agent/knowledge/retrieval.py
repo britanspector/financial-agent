@@ -128,7 +128,7 @@ def _regulatory_matches(chunk: Chunk, request: RegulatorySearchInput) -> bool:
     if request.issuer is not None and metadata.issuer.casefold() != request.issuer.casefold():
         return False
     if request.as_of is None:
-        return True
+        return metadata.status == "active"
     return metadata.publish_date <= request.as_of and metadata.effective_date <= request.as_of
 
 

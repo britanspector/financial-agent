@@ -7,6 +7,8 @@ import time
 
 import pytest
 
+from financial_agent.__main__ import main
+
 
 def run(*args, env=None):
     return subprocess.run([sys.executable, "-m", "financial_agent", *args], capture_output=True, text=True, timeout=30, env=env)
@@ -62,3 +64,16 @@ def test_cli_invalid_credentials_do_not_leak(tmp_path):
     result = run("call-tool", "get_customer_context", "--user-id", "syn-user-0001", env=env)
     assert result.returncode == 1
     assert secret not in result.stdout + result.stderr
+
+
+def test_serve_user_data_disables_uvicorn_access_log(monkeypatch):
+    captured = {}
+
+    def fake_run(app, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr("uvicorn.run", fake_run)
+    monkeypatch.setattr(sys, "argv", ["financial-agent", "serve-user-data"])
+
+    assert main() == 0
+    assert captured["access_log"] is False

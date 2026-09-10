@@ -37,6 +37,15 @@ def _api_error(code: str, message: str, status: int, request_id: UUID, *, retrya
     )
 
 
+def _reject_unknown_query_parameters(
+    request: Request, allowed: frozenset[str], request_id: UUID,
+) -> JSONResponse | None:
+    if set(request.query_params) <= allowed:
+        return None
+    logger.info("user-data request validation failed request_id=%s", request_id)
+    return _api_error("INVALID_ARGUMENT", "Invalid request parameters", 422, request_id)
+
+
 def create_app(settings: Settings | None = None, *, service: UserDataService | None = None) -> FastAPI:
     """Build the HTTP app; business composition remains in the existing runtime."""
     if service is None:
@@ -88,15 +97,18 @@ def create_app(settings: Settings | None = None, *, service: UserDataService | N
         )
 
     @app.get("/v1/customers/{user_id}/context", response_model=CustomerContext)
-    async def customer_context(user_id: str, x_api_key: str | None = Header(default=None, alias="X-API-Key"), x_request_id: str | None = Header(default=None, alias="X-Request-ID")):
+    async def customer_context(request: Request, user_id: str, x_api_key: str | None = Header(default=None, alias="X-API-Key"), x_request_id: str | None = Header(default=None, alias="X-Request-ID")):
         try:
             request_id = _request_id(x_request_id)
         except ValueError:
             return _api_error("INVALID_ARGUMENT", "Invalid X-Request-ID", 422, uuid4())
+        if error := _reject_unknown_query_parameters(request, frozenset(), request_id):
+            return error
         return await invoke("get_customer_context", {"user_id": user_id}, CustomerContext, x_api_key, request_id)
 
     @app.get("/v1/customers/{user_id}/margin-account", response_model=MarginAccount)
     async def margin_account(
+        request: Request,
         user_id: str,
         start_date: date | None = None,
         end_date: date | None = None,
@@ -109,6 +121,10 @@ def create_app(settings: Settings | None = None, *, service: UserDataService | N
             request_id = _request_id(x_request_id)
         except ValueError:
             return _api_error("INVALID_ARGUMENT", "Invalid X-Request-ID", 422, uuid4())
+        if error := _reject_unknown_query_parameters(
+            request, frozenset({"start_date", "end_date", "limit", "offset"}), request_id,
+        ):
+            return error
         arguments = {
             "user_id": user_id, "start_date": start_date, "end_date": end_date,
             "limit": limit, "offset": offset,
@@ -116,19 +132,23 @@ def create_app(settings: Settings | None = None, *, service: UserDataService | N
         return await invoke("get_margin_account", arguments, MarginAccount, x_api_key, request_id)
 
     @app.get("/v1/customers/{user_id}/portfolio/positions", response_model=PortfolioPositions)
-    async def portfolio_positions(user_id: str, x_api_key: str | None = Header(default=None, alias="X-API-Key"), x_request_id: str | None = Header(default=None, alias="X-Request-ID")):
+    async def portfolio_positions(request: Request, user_id: str, x_api_key: str | None = Header(default=None, alias="X-API-Key"), x_request_id: str | None = Header(default=None, alias="X-Request-ID")):
         try:
             request_id = _request_id(x_request_id)
         except ValueError:
             return _api_error("INVALID_ARGUMENT", "Invalid X-Request-ID", 422, uuid4())
+        if error := _reject_unknown_query_parameters(request, frozenset(), request_id):
+            return error
         return await invoke("get_portfolio_positions", {"user_id": user_id}, PortfolioPositions, x_api_key, request_id)
 
     @app.get("/v1/customers/{user_id}/portfolio/analytics", response_model=PortfolioAnalytics)
-    async def portfolio_analytics(user_id: str, x_api_key: str | None = Header(default=None, alias="X-API-Key"), x_request_id: str | None = Header(default=None, alias="X-Request-ID")):
+    async def portfolio_analytics(request: Request, user_id: str, x_api_key: str | None = Header(default=None, alias="X-API-Key"), x_request_id: str | None = Header(default=None, alias="X-Request-ID")):
         try:
             request_id = _request_id(x_request_id)
         except ValueError:
             return _api_error("INVALID_ARGUMENT", "Invalid X-Request-ID", 422, uuid4())
+        if error := _reject_unknown_query_parameters(request, frozenset(), request_id):
+            return error
         return await invoke("get_portfolio_analytics", {"user_id": user_id}, PortfolioAnalytics, x_api_key, request_id)
 
     return app

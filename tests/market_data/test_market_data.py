@@ -130,6 +130,8 @@ def test_invalid_json_becomes_provider_error():
 
 @pytest.mark.parametrize("exception,code,retryable", [
     (httpx.ReadTimeout("slow"), "PROVIDER_TIMEOUT", True),
+    (httpx.ConnectTimeout("connect timeout"), "PROVIDER_TIMEOUT", True),
+    (httpx.TimeoutException("timeout"), "PROVIDER_TIMEOUT", True),
     (httpx.ConnectError("offline"), "PROVIDER_UNAVAILABLE", True),
 ])
 def test_transport_errors_are_mapped_without_retry(exception, code, retryable):
@@ -143,7 +145,9 @@ def test_transport_errors_are_mapped_without_retry(exception, code, retryable):
     registry = register_market_tools(MarketDataService(provider(handler)))
     result = registry.invoke("get_market_snapshot", {"symbol": "600519.SH"}, context=CallContext())
     assert result.error.code == code
+    assert result.error.http_status == (504 if code == "PROVIDER_TIMEOUT" else 503)
     assert result.error.retryable is retryable
+    assert str(exception) not in result.error.message
     assert calls == 1
 
 
