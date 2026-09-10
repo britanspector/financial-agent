@@ -2,7 +2,7 @@
 
 用于深度学习和求职展示的本地多工具 Agent 工程探索。全部用户数据为 synthetic，不连接真实公司内部系统。
 
-**当前阶段：Phase 1.4 Multi-source RAG v0.1 实现完成。** 用户数据服务、Market Data v0.1，以及三路 hybrid retrieval Tool 已具备；真实 Qwen 验收需由环境变量提供凭证。
+**当前阶段：Phase 2 LangGraph Agent Skeleton 实现完成。** 现有 4 个用户数据 Tool、2 个行情 Tool 和 3 个 RAG Tool 已通过组合 Registry 接入依赖感知的并行执行图；Task 目前由调用方人工构造，不包含 LLM Planner。
 
 ## 项目结构与依赖
 
@@ -12,8 +12,9 @@ financial-agent/
 ├── src/financial_agent/
 │   ├── __init__.py / __main__.py / config.py
 │   ├── schemas.py / logging_config.py
+│   ├── agent/                  # AgentState、Task、LangGraph execution graph
 │   ├── demo_faults.py           # 仅测试/demo 使用的故障序列
-│   ├── tools/                  # ToolResult、ToolSpec、ToolRegistry
+│   ├── tools/                  # ToolResult、ToolRegistry、CompositeToolRegistry
 │   ├── user_data/              # models、fixtures、repository、auth、audit、service、runtime
 │   ├── market_data/            # Market models、Normalizer、TushareProvider、Service
 │   └── knowledge/              # manifest schema、Markdown ingestion、source-aware chunking
@@ -31,7 +32,7 @@ Python >=3.11；本机验证使用 Python 3.13.5。依赖范围定义在 pyproje
 | 依赖 | 用途 |
 | --- | --- |
 | jieba >=0.42,<1 | 中文 BM25 分词 |
-| langgraph >=1.0,<2 | 后续图编排的基础依赖；当前仅离线冒烟测试 |
+| langgraph >=1.0,<2 | Task 依赖调度、并行 fan-out 和结果归并 |
 | numpy >=2,<3 | 本地 dense cosine similarity 与 embedding index |
 | pydantic >=2.10,<3 | schema、输入与结果校验 |
 | pydantic-settings >=2.7,<3 | 环境变量和可选 .env 加载 |
@@ -168,6 +169,32 @@ ToolResult[T] 固定包含 status / data / source / latency / error / request_id
 
 每次调用尝试追加一条 JSONL 审计，记录 UTC 时间、请求 ID、工具、已验证身份、校验后的目标 ID、结果码和耗时。认证失败不记录身份，未知工具统一记录 unknown。不记录 key、完整参数或结果正文，错误消息不回显 SQL、路径和异常原文。审计写入失败时丢弃数据并返回 AUDIT_UNAVAILABLE；这次审计无法保证落盘。
 
+## LangGraph Agent execution skeleton
+
+Phase 2 使用调用方人工构造的 `Task(task_id, tool_name, arguments, dependencies)`，不调用 Planner。执行状态 `financial_agent.agent.AgentState` 包含 query、history、tasks、tool_results、errors、final_output 和 iteration_count；调用凭证通过 Graph 构建参数注入，不进入 state 或结果。
+
+Graph 拓扑为 `START → dispatcher → execute_tool → collect_results → dispatcher`，完成后进入 `finalize → END`。Dispatcher 每轮通过 LangGraph `Send` 将所有无未完成依赖的 Task 并行 fan-out；`tool_results` 和 `errors` reducer 只接收节点产生的增量，`collect_results` 不重写已有 Result Pool。依赖失败会生成 `DEPENDENCY_FAILED` 并阻断下游；无法解析的依赖通过错误 reason 区分 `missing_dependency` 和 `cycle_or_deadlock`。
+
+`CompositeToolRegistry` / `merge_registries()` 仅按工具名路由到原有 User、Market、RAG Registry，不修改 Phase 1 `ToolRegistry` 的注册、校验、鉴权、审计或错误行为。完整运行时可通过 `build_agent_tools(settings)` 组合全部 9 个 Tool；对应的行情和 RAG Provider 仍要求环境变量凭证及已构建的 embedding index。
+
+```python
+from financial_agent.agent import Task, run_execution_graph
+from financial_agent.schemas import UserQuery
+
+state = run_execution_graph(
+    UserQuery(query="查询客户持仓"),
+    [Task(
+        task_id="positions",
+        tool_name="get_portfolio_positions",
+        arguments={"user_id": "syn-user-0001"},
+        dependencies=[],
+    )],
+    registry,
+    context=call_context,
+)
+print(state.final_output.model_dump_json())
+```
+
 ## HTTP 错误与审计
 
 HTTP API 不暴露 Agent `ToolResult`：成功响应是领域模型，失败响应是 `ApiError`。Client 将 401、403、404、422、5xx 以及 timeout/连接失败恢复为 Agent 层 `ToolResult`。每次 Client 调用生成 `X-Request-ID`，Server 将其用于业务 ToolResult 和 JSONL 审计；transport 错误仅通过日志记录，不伪造业务 AuditSink 事件。
@@ -274,6 +301,7 @@ registry = register_user_tools(UserDataService(
 - Phase 1.1：106 个测试通过，包含全部 Phase 0 测试；pip check 无依赖冲突。
 - Phase 1.2：116 个默认测试通过；2 个 Tushare live tests 通过；pip check 无依赖冲突。
 - Phase 1.4（2026-09-11）：151 个默认测试、2 个 integration tests、5 个 live tests 全部通过；真实 Qwen 3.7 retrieval eval 为 Hit@1 0.9583、Hit@5 1.0000、MRR 0.9792、Recall@5 1.0000。
+- Phase 2（2026-09-11）：162 个默认测试和 2 个 integration tests 通过；LangGraph 单任务、并行、依赖、失败阻断、未知 Tool、非法参数、增量 Result Pool 和不可解析依赖均为离线测试。
 - 覆盖四个业务 Tool、FastAPI endpoint、Async HTTP Client、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
 - Market Data 测试使用 `httpx.MockTransport`，不访问 live provider；live smoke test 使用 `pytest -m live` 单独运行。
 
@@ -286,10 +314,14 @@ registry = register_user_tools(UserDataService(
 - 用户白名单与 scopes、统一类型化结果、错误分类、JSONL 审计、可注入故障序列。
 - 72 份多源知识文档、严格 manifest 校验和统一的 source-aware Chunk 输出。
 - 中文 BM25、NumPy dense cosine、RRF、provider rerank、metadata/time filter、Adaptive Top-K 和独立 retrieval eval。
+- LangGraph execution/control plane、人工 Task DAG、并行 ready-task fan-out、依赖失败阻断和结构化 FinalResult。
+- 不侵入现有 Registry 的 9 Tool 组合路由，完整保留 ToolResult 与 retryable 信息。
 
 ## 已知限制
 
-- 尚无应用 LangGraph 工作流、历史压缩、Planner、知识检索 Tool、RL 或模型质量评估；测试中的单节点图仅验证依赖可用。
+- 尚无 Planner LLM、Plan Validator、Retry、Verifier、Rewrite/Replan、Context Manager 或 Agentic RL。
+- dependencies 本轮只控制执行顺序，尚未定义将上游 ToolResult 绑定到下游 arguments 的表达式与解析规则。
+- Graph 尚未提供持久化 checkpoint、跨进程恢复、任务取消或生产级并发配额。
 - 真实 Qwen index 和 live smoke test 依赖宿主通过环境变量提供 API Key；默认测试不会访问外网。
 - Knowledge retrieval 尚未实现复杂表格解析、精细版本推理、query rewrite、decomposition、HyDE、GraphRAG 或向量数据库。
 - Market Data v0.1 已提供同步 Tushare REST Provider；120 积分下尚无指数、复权、实时行情、分钟线、Level-2、新闻、资金流或指标库。
@@ -299,6 +331,6 @@ registry = register_user_tools(UserDataService(
 
 ## 下一步
 
-下一步由宿主注入 Qwen API Key 和所属地域的业务空间 base URL，构建真实 embedding index 并运行 live smoke test；之后根据真实模型 eval 的失败案例迭代检索参数。
+下一阶段接入 Structured Planner：定义 Planner 的结构化 Task DAG 输出、上游结果到下游参数的绑定规则，并在执行前加入工具名、参数 schema、依赖环和任务规模校验。之后再独立设计 retry、Verifier、replan 和 context 管理，不在当前 execution skeleton 中提前实现。
 
 后续工程约束：外部模型和数据源必须经 adapter/registry，LangGraph node 不直接依赖 provider SDK；API key 仅由环境配置注入；所有用户数据为 synthetic；每个功能补测试，并同步更新 README 的“当前能力 / 已知限制 / 下一步”。
