@@ -1,0 +1,1 @@
+{"timestamp":"2026-09-11T06:06:57.713274Z","request_id":"23f14113-7ba8-43b7-828f-d6294f2d02ea","tool":"get_portfolio_analytics","principal_id":"synthetic-no-scope","user_id":null,"status":"error","code":"FORBIDDEN","http_status":403,"latency":0.026499999876250513}

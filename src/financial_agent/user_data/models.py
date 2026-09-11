@@ -18,8 +18,8 @@ class UserInput(Schema):
 
 
 class MarginAccountInput(UserInput):
-    start_date: date | None = None
-    end_date: date | None = None
+    start_date: date | None = Field(default=None, description="Inclusive first date of daily history")
+    end_date: date | None = Field(default=None, description="Exclusive end date of daily history")
     limit: int = Field(default=60, ge=1, le=366, strict=True)
     offset: int = Field(default=0, ge=0, strict=True)
 

@@ -21,8 +21,8 @@ class MarketSnapshotInput(Schema):
 
 class MarketHistoryInput(Schema):
     symbol: str = Field(min_length=1, max_length=32)
-    start_date: date
-    end_date: date
+    start_date: date = Field(description="Inclusive first date of the requested interval")
+    end_date: date = Field(description="Exclusive end date of the requested interval")
 
     @model_validator(mode="after")
     def valid_interval(self):

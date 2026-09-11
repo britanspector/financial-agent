@@ -2,7 +2,7 @@
 
 用于深度学习和求职展示的本地多工具 Agent 工程探索。全部用户数据为 synthetic，不连接真实公司内部系统。
 
-**当前阶段：Phase 2 LangGraph Agent Skeleton 实现完成。** 现有 4 个用户数据 Tool、2 个行情 Tool 和 3 个 RAG Tool 已通过组合 Registry 接入依赖感知的并行执行图；Task 目前由调用方人工构造，不包含 LLM Planner。
+**当前阶段：Phase 3.1 Structured Planner + Plan Validator 实现完成。** 现有 4 个用户数据 Tool、2 个行情 Tool 和 3 个 RAG Tool 的公开契约可供 Planner 选用；Qwen Planner 生成结构化 Task DAG，确定性 Validator 在进入既有 Phase 2 执行图前校验可执行性。
 
 ## 项目结构与依赖
 
@@ -23,6 +23,7 @@ financial-agent/
 │   ├── test_logging.py / test_bootstrap.py
 │   ├── user_data/              # 数据、权限、Tool、故障、审计、CLI
 │   └── market_data/            # REST Provider、Tool 与 live test
+├── eval/planner/                # 与 prompt/source 解耦的固定 Planner Eval JSONL
 └── data/
     └── knowledge/              # 72 份 synthetic Markdown 和 manifest.json
 ```
@@ -195,6 +196,42 @@ state = run_execution_graph(
 print(state.final_output.model_dump_json())
 ```
 
+## Structured Planner + Plan Validator
+
+Phase 3.1 在执行图之外新增 `financial_agent.planner`。`StructuredPlanner` 输入 `UserQuery.query`、未压缩的完整 `history`、9 个 Tool 的公开 description/input JSON Schema、当前日期和一小组 planning rules。输出固定为：
+
+```json
+{
+  "decision": "execute",
+  "tasks": [
+    {
+      "task_id": "t1",
+      "tool_name": "get_market_history",
+      "arguments": {
+        "symbol": "600519.SH",
+        "start_date": "2026-01-01",
+        "end_date": "2026-02-01"
+      },
+      "dependencies": []
+    }
+  ]
+}
+```
+
+`decision` 为 `execute`、`clarify` 或 `no_tool`：execute 必须有 Task；clarify/no_tool 必须没有 Task。缺少 user_id、证券代码或其他业务必填参数时使用 clarify，通用问候/写作或系统无能力支持的请求使用 no_tool。Prompt 分为两条 message：system 包含最小充分计划、不得编造参数、并行/依赖、时间字段、能力边界和禁止结果引用等规则；user 是包含 query、完整 history、current_date 和 tools 的 JSON。Provider 发送 Tool-aware strict JSON Schema：每个 `tool_name` 分支的 `arguments` 直接使用该 Tool 的公开 input schema，杜绝开放对象生成非契约参数键。Tool 参数 schema 明示日期区间为 `[start_date, end_date)`，以及各 RAG `as_of` 的含上界语义。法规检索只用于法规/监管/适当性，业务知识只用于 FAQ/流程/产品说明；研报不是实时新闻；行情 Tool 仅支持已有的 A 股日终/历史行情，不支持指数实时、新闻、汇率或预测。Planner 仅依赖 `PlannerProvider` 协议。默认 adapter 通过 DashScope OpenAI-compatible `/chat/completions` 调用 `qwen3.7-flash`，temperature 默认为 0.1，关闭 thinking，并优先使用 strict JSON Schema response format。API key 复用 `FINANCIAL_AGENT_QWEN_API_KEY`；model、base URL、timeout、temperature 和 task 上限分别由 `FINANCIAL_AGENT_PLANNER_*` 配置。
+
+`PlanValidator` 不调用模型或 Tool，只保证计划合法可执行。它校验 decision 与任务是否一致，及任务数上限、重复 task ID、未知 Tool、Pydantic 参数 schema、动态 `$t1.result...` 引用、缺失/自身/重复 dependency 和 dependency cycle。校验成功时参数会按 Tool schema 规范化并转换为现有 Phase 2 `Task`；clarify/no_tool 成功时返回空 Task。Validator 不评价 Tool 选择或业务语义是否最优。dependencies 仍只控制顺序，不绑定上游结果。
+
+固定 Planner Eval Set 位于 `eval/planner/planner_cases.jsonl`，共 40 条独立 JSONL case，不从 prompt、模型输出或源码反推期望。每条都包含 query、完整 history、expected_tools、expected_arguments、expected_dependencies、temporal_expectation、forbidden_tools；可用 `acceptable_plans` 声明多套等价 Tool/参数/依赖 pattern。case 不保存或匹配模型生成的 task ID，依赖只按上游/下游 Tool edge 比较。4 条信息不足或歧义 case 标记为 `abstain`，要求不调用 Tool、不编造参数；它们不进入 executable valid plan rate 的分母。
+
+runner 对每条实际 StructuredPlan 先调用 PlanValidator，再在 canonical 与全部 acceptable patterns 中选择语义得分最高者。指标为 valid plan rate（36 个需要可执行 plan 的 case）、tool selection accuracy（case 级 Tool multiset 精确匹配）、argument accuracy（Tool 实例参数精确匹配）、temporal accuracy（`as_of/start_date/end_date` 子集）、dependency accuracy（Tool 依赖 edge F1）和 unnecessary tool call rate（多余调用数 / 实际调用数）。默认 pytest 使用 Fake Provider；真实 Qwen 评估会依次运行 40 条 case：
+
+```powershell
+$env:FINANCIAL_AGENT_QWEN_API_KEY = "<your-key>"
+.\.venv\Scripts\python.exe scripts\evaluate_planner.py
+.\.venv\Scripts\python.exe -m pytest -q -m live tests\planner\test_live.py
+```
+
 ## HTTP 错误与审计
 
 HTTP API 不暴露 Agent `ToolResult`：成功响应是领域模型，失败响应是 `ApiError`。Client 将 401、403、404、422、5xx 以及 timeout/连接失败恢复为 Agent 层 `ToolResult`。每次 Client 调用生成 `X-Request-ID`，Server 将其用于业务 ToolResult 和 JSONL 审计；transport 错误仅通过日志记录，不伪造业务 AuditSink 事件。
@@ -302,6 +339,7 @@ registry = register_user_tools(UserDataService(
 - Phase 1.2：116 个默认测试通过；2 个 Tushare live tests 通过；pip check 无依赖冲突。
 - Phase 1.4（2026-09-11）：151 个默认测试、2 个 integration tests、5 个 live tests 全部通过；真实 Qwen 3.7 retrieval eval 为 Hit@1 0.9583、Hit@5 1.0000、MRR 0.9792、Recall@5 1.0000。
 - Phase 2（2026-09-11）：162 个默认测试和 2 个 integration tests 通过；LangGraph 单任务、并行、依赖、失败阻断、未知 Tool、非法参数、增量 Result Pool 和不可解析依赖均为离线测试。
+- Phase 3.1 final optimization（2026-09-11）：Planner policy 明确了提供合法标识时不得 clarify、synthetic 实体原样保留、Tool 域优先级、显式顺序依赖和统一 temporal policy；末尾 checklist 进一步强调多实体合并检索、公告/规则路由及 date/dependency 必须落实。Eval 对语义等价 query 与 query 中保留的 entity filter 评分为 acceptable，同时继续严格比较标识、类别与日期。固定 40 条真实 Eval 的 valid plan rate 1.0000、tool selection accuracy 0.8250、argument accuracy 0.7800、temporal accuracy 0.7500、dependency accuracy 0.9000、unnecessary tool call rate 0.0638；完整逐 case 报告见 `reports/phase3_planner_policy_checklist_40.md`。
 - 覆盖四个业务 Tool、FastAPI endpoint、Async HTTP Client、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
 - Market Data 测试使用 `httpx.MockTransport`，不访问 live provider；live smoke test 使用 `pytest -m live` 单独运行。
 
@@ -316,11 +354,16 @@ registry = register_user_tools(UserDataService(
 - 中文 BM25、NumPy dense cosine、RRF、provider rerank、metadata/time filter、Adaptive Top-K 和独立 retrieval eval。
 - LangGraph execution/control plane、人工 Task DAG、并行 ready-task fan-out、依赖失败阻断和结构化 FinalResult。
 - 不侵入现有 Registry 的 9 Tool 组合路由，完整保留 ToolResult 与 retryable 信息。
+- Provider 解耦的 Structured Planner、严格 Task DAG schema、Qwen 3.7 Flash adapter 和执行前确定性 PlanValidator。
+- Prompt-independent 的 40 条 Planner Eval Set：单/并行/依赖、三源组合、当前/历史时间、RAG filters、法规、FAQ、无关 Tool 与 abstain 边界，以及六项离线/真实模型通用指标。
 
 ## 已知限制
 
-- 尚无 Planner LLM、Plan Validator、Retry、Verifier、Rewrite/Replan、Context Manager 或 Agentic RL。
+- 尚无 Result Binding、Retry、Verifier、Rewrite/Replan、Context Manager 或 Agentic RL。
 - dependencies 本轮只控制执行顺序，尚未定义将上游 ToolResult 绑定到下游 arguments 的表达式与解析规则。
+- clarify/no_tool 只表达 Planner 决策；本阶段仍未实现面向用户的澄清文案或 Result Binding。
+- Planner 尚未接入 execution graph；调用方需要先 plan、validate，再显式把通过校验的 tasks 交给 Phase 2 graph。
+- Eval Set 对 Tool/参数/依赖边做固定语义匹配，但尚未覆盖同义 query rewrite、重复同名 Tool 实例的边身份、统计置信区间、成本和延迟。
 - Graph 尚未提供持久化 checkpoint、跨进程恢复、任务取消或生产级并发配额。
 - 真实 Qwen index 和 live smoke test 依赖宿主通过环境变量提供 API Key；默认测试不会访问外网。
 - Knowledge retrieval 尚未实现复杂表格解析、精细版本推理、query rewrite、decomposition、HyDE、GraphRAG 或向量数据库。
@@ -331,6 +374,6 @@ registry = register_user_tools(UserDataService(
 
 ## 下一步
 
-下一阶段接入 Structured Planner：定义 Planner 的结构化 Task DAG 输出、上游结果到下游参数的绑定规则，并在执行前加入工具名、参数 schema、依赖环和任务规模校验。之后再独立设计 retry、Verifier、replan 和 context 管理，不在当前 execution skeleton 中提前实现。
+Phase 3.2 优先定义 Result Binding 的类型化表达式、上游结果字段白名单、binding 解析/校验和缺失值行为，再把 plan → validate → execute 组合成不改变 Phase 2 调度语义的入口。之后再独立设计澄清、retry、Verifier、replan 和 context 管理。
 
 后续工程约束：外部模型和数据源必须经 adapter/registry，LangGraph node 不直接依赖 provider SDK；API key 仅由环境配置注入；所有用户数据为 synthetic；每个功能补测试，并同步更新 README 的“当前能力 / 已知限制 / 下一步”。

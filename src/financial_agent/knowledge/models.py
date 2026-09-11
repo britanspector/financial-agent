@@ -114,16 +114,16 @@ class ResearchSearchInput(Schema):
     query: str = Field(min_length=1, max_length=2_000)
     companies: list[str] = Field(default_factory=list, max_length=20)
     brokers: list[str] = Field(default_factory=list, max_length=20)
-    as_of: date | None = None
+    as_of: date | None = Field(default=None, description="Inclusive publication-date upper bound")
 
 
 class RegulatorySearchInput(Schema):
     query: str = Field(min_length=1, max_length=2_000)
     issuer: str | None = Field(default=None, min_length=1, max_length=128)
-    as_of: date | None = None
+    as_of: date | None = Field(default=None, description="Inclusive knowledge-time upper bound")
 
 
 class BusinessSearchInput(Schema):
     query: str = Field(min_length=1, max_length=2_000)
     category: Literal["account", "trading", "margin", "product_feature", "risk_notice"] | None = None
-    as_of: date | None = None
+    as_of: date | None = Field(default=None, description="Inclusive effective-date upper bound")

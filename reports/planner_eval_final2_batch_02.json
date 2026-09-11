@@ -1,0 +1,804 @@
+{
+  "metrics": {
+    "case_count": 10,
+    "executable_case_count": 10,
+    "abstention_case_count": 0,
+    "valid_plan_rate": 1.0,
+    "tool_selection_accuracy": 1.0,
+    "argument_accuracy": 0.8,
+    "temporal_accuracy": 1.0,
+    "dependency_accuracy": 1.0,
+    "unnecessary_tool_call_rate": 0.0
+  },
+  "cases": [
+    {
+      "case_id": "market_history_half_open",
+      "query": "查询 600519.SH 在 [2026-01-01, 2026-02-01) 的历史行情",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_market_history"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_market_history",
+            "arguments": {
+              "symbol": "600519.SH",
+              "start_date": "2026-01-01",
+              "end_date": "2026-02-01"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": [
+          {
+            "tool_name": "get_market_history",
+            "arguments": {
+              "start_date": "2026-01-01",
+              "end_date": "2026-02-01"
+            }
+          }
+        ]
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_market_history",
+            "arguments": {
+              "symbol": "600519.SH",
+              "start_date": "2026-01-01",
+              "end_date": "2026-02-01"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 1,
+      "temporal_total_count": 1,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "get_market_history",
+          "expected": {
+            "symbol": "600519.SH",
+            "start_date": "2026-01-01",
+            "end_date": "2026-02-01"
+          },
+          "actual": {
+            "symbol": "600519.SH",
+            "start_date": "2026-01-01",
+            "end_date": "2026-02-01"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "market_history_inclusive_end",
+      "query": "查询 000001.SZ 在 2026年3月1日至2026年3月31日（含首尾）的历史行情",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_market_history"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_market_history",
+            "arguments": {
+              "symbol": "000001.SZ",
+              "start_date": "2026-03-01",
+              "end_date": "2026-04-01"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": [
+          {
+            "tool_name": "get_market_history",
+            "arguments": {
+              "start_date": "2026-03-01",
+              "end_date": "2026-04-01"
+            }
+          }
+        ]
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_market_history",
+            "arguments": {
+              "symbol": "000001.SZ",
+              "start_date": "2026-03-01",
+              "end_date": "2026-04-01"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 1,
+      "temporal_total_count": 1,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "get_market_history",
+          "expected": {
+            "symbol": "000001.SZ",
+            "start_date": "2026-03-01",
+            "end_date": "2026-04-01"
+          },
+          "actual": {
+            "symbol": "000001.SZ",
+            "start_date": "2026-03-01",
+            "end_date": "2026-04-01"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "market_only_forbidden_tools",
+      "query": "只查询 600519.SH 当前行情，不要用户数据或知识库",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_market_snapshot"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_market_snapshot",
+            "arguments": {
+              "symbol": "600519.SH"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_market_snapshot",
+            "arguments": {
+              "symbol": "600519.SH"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "get_market_snapshot",
+          "expected": {
+            "symbol": "600519.SH"
+          },
+          "actual": {
+            "symbol": "600519.SH"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "research_single_company",
+      "query": "检索澄海智造的经营展望研报",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_research_reports"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "澄海智造的经营展望研报",
+              "companies": [
+                "澄海智造"
+              ]
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "澄海智造的经营展望研报",
+              "companies": [
+                "澄海智造"
+              ],
+              "brokers": [],
+              "as_of": null
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "search_research_reports",
+          "expected": {
+            "query": "澄海智造的经营展望研报",
+            "companies": [
+              "澄海智造"
+            ]
+          },
+          "actual": {
+            "query": "澄海智造的经营展望研报",
+            "companies": [
+              "澄海智造"
+            ],
+            "brokers": [],
+            "as_of": null
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "research_broker_as_of",
+      "query": "查甲辰证券研究所截至 2026-06-30 对青禾医药的研报",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_research_reports"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "甲辰证券研究所截至 2026-06-30 对青禾医药的研报",
+              "companies": [
+                "青禾医药"
+              ],
+              "brokers": [
+                "甲辰证券研究所"
+              ],
+              "as_of": "2026-06-30"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": [
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "as_of": "2026-06-30"
+            }
+          }
+        ]
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "青禾医药研报",
+              "companies": [
+                "青禾医药"
+              ],
+              "brokers": [
+                "甲辰证券研究所"
+              ],
+              "as_of": "2026-06-30"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 1,
+      "temporal_total_count": 1,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "search_research_reports",
+          "expected": {
+            "query": "甲辰证券研究所截至 2026-06-30 对青禾医药的研报",
+            "companies": [
+              "青禾医药"
+            ],
+            "brokers": [
+              "甲辰证券研究所"
+            ],
+            "as_of": "2026-06-30"
+          },
+          "actual": {
+            "query": "青禾医药研报",
+            "companies": [
+              "青禾医药"
+            ],
+            "brokers": [
+              "甲辰证券研究所"
+            ],
+            "as_of": "2026-06-30"
+          },
+          "correct": true,
+          "status": "acceptable",
+          "reason": "query wording is semantically equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "research_multi_company",
+      "query": "比较曜石半导体和云帆软件的最新经营研报",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_research_reports"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "比较曜石半导体和云帆软件的最新经营研报",
+              "companies": [
+                "曜石半导体",
+                "云帆软件"
+              ]
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "曜石半导体和云帆软件的最新经营研报",
+              "companies": [
+                "曜石半导体",
+                "云帆软件"
+              ],
+              "brokers": [],
+              "as_of": null
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "search_research_reports",
+          "expected": {
+            "query": "比较曜石半导体和云帆软件的最新经营研报",
+            "companies": [
+              "曜石半导体",
+              "云帆软件"
+            ]
+          },
+          "actual": {
+            "query": "曜石半导体和云帆软件的最新经营研报",
+            "companies": [
+              "曜石半导体",
+              "云帆软件"
+            ],
+            "brokers": [],
+            "as_of": null
+          },
+          "correct": true,
+          "status": "acceptable",
+          "reason": "query wording is semantically equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "research_multi_entity_historical",
+      "query": "找衡川证券研究所截至 2026-05-01 对瀚源新能源和远陆物流的研报",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_research_reports"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "找衡川证券研究所截至 2026-05-01 对瀚源新能源和远陆物流的研报",
+              "companies": [
+                "瀚源新能源",
+                "远陆物流"
+              ],
+              "brokers": [
+                "衡川证券研究所"
+              ],
+              "as_of": "2026-05-01"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": [
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "as_of": "2026-05-01"
+            }
+          }
+        ]
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "瀚源新能源和远陆物流的研报",
+              "companies": [
+                "Hanyuan New Energy",
+                "Yuanlu Logistics"
+              ],
+              "brokers": [
+                "Hengchuan Securities Research Institute"
+              ],
+              "as_of": "2026-05-01"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": false,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 1,
+      "temporal_total_count": 1,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "search_research_reports",
+          "expected": {
+            "query": "找衡川证券研究所截至 2026-05-01 对瀚源新能源和远陆物流的研报",
+            "companies": [
+              "瀚源新能源",
+              "远陆物流"
+            ],
+            "brokers": [
+              "衡川证券研究所"
+            ],
+            "as_of": "2026-05-01"
+          },
+          "actual": {
+            "query": "瀚源新能源和远陆物流的研报",
+            "companies": [
+              "Hanyuan New Energy",
+              "Yuanlu Logistics"
+            ],
+            "brokers": [
+              "Hengchuan Securities Research Institute"
+            ],
+            "as_of": "2026-05-01"
+          },
+          "correct": false,
+          "status": "incorrect",
+          "reason": "required value or non-default argument differs"
+        }
+      ],
+      "error_reasons": [
+        "one or more required values or non-default arguments differ"
+      ]
+    },
+    {
+      "case_id": "research_unfiltered_topic",
+      "query": "检索银行资本补充相关的研究报告",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_research_reports"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "银行资本补充相关的研究报告"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "银行资本补充相关的研究报告",
+              "companies": [],
+              "brokers": [],
+              "as_of": null
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "search_research_reports",
+          "expected": {
+            "query": "银行资本补充相关的研究报告"
+          },
+          "actual": {
+            "query": "银行资本补充相关的研究报告",
+            "companies": [],
+            "brokers": [],
+            "as_of": null
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "research_company_from_history",
+      "query": "查看截至 2026-04-30 的该公司研报",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_research_reports"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "查看截至 2026-04-30 的该公司研报",
+              "companies": [
+                "沧澜消费"
+              ],
+              "as_of": "2026-04-30"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": [
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "as_of": "2026-04-30"
+            }
+          }
+        ]
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "查看截至 2026-04-30 的该公司研报",
+              "companies": [
+                "Canglan Consumer"
+              ],
+              "brokers": [],
+              "as_of": "2026-04-30"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": false,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 1,
+      "temporal_total_count": 1,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "search_research_reports",
+          "expected": {
+            "query": "查看截至 2026-04-30 的该公司研报",
+            "companies": [
+              "沧澜消费"
+            ],
+            "as_of": "2026-04-30"
+          },
+          "actual": {
+            "query": "查看截至 2026-04-30 的该公司研报",
+            "companies": [
+              "Canglan Consumer"
+            ],
+            "brokers": [],
+            "as_of": "2026-04-30"
+          },
+          "correct": false,
+          "status": "incorrect",
+          "reason": "required value or non-default argument differs"
+        }
+      ],
+      "error_reasons": [
+        "one or more required values or non-default arguments differ"
+      ]
+    },
+    {
+      "case_id": "regulation_current_margin",
+      "query": "查询中证融资服务中心当前有效的最低保证金比例规则",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_regulatory_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_regulatory_knowledge",
+            "arguments": {
+              "query": "当前有效的最低保证金比例规则",
+              "issuer": "中证融资服务中心"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "search_regulatory_knowledge",
+            "arguments": {
+              "query": "中证融资服务中心当前有效的最低保证金比例规则",
+              "issuer": null,
+              "as_of": null
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "search_regulatory_knowledge",
+          "expected": {
+            "query": "当前有效的最低保证金比例规则",
+            "issuer": "中证融资服务中心"
+          },
+          "actual": {
+            "query": "中证融资服务中心当前有效的最低保证金比例规则",
+            "issuer": null,
+            "as_of": null
+          },
+          "correct": true,
+          "status": "acceptable",
+          "reason": "entity filter omitted but preserved verbatim in query"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    }
+  ]
+}

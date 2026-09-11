@@ -1,0 +1,782 @@
+{
+  "metrics": {
+    "case_count": 10,
+    "executable_case_count": 10,
+    "abstention_case_count": 0,
+    "valid_plan_rate": 1.0,
+    "tool_selection_accuracy": 0.7,
+    "argument_accuracy": 0.6153846153846154,
+    "temporal_accuracy": 0.25,
+    "dependency_accuracy": 1.0,
+    "unnecessary_tool_call_rate": 0.09090909090909091
+  },
+  "cases": [
+    {
+      "case_id": "regulation_historical_margin",
+      "query": "查询中证融资服务中心截至 2025-12-31 的最低保证金比例规则",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_regulatory_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_regulatory_knowledge",
+            "arguments": {
+              "query": "截至 2025-12-31 的最低保证金比例规则",
+              "issuer": "中证融资服务中心",
+              "as_of": "2025-12-31"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": [
+          {
+            "tool_name": "search_regulatory_knowledge",
+            "arguments": {
+              "as_of": "2025-12-31"
+            }
+          }
+        ]
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "search_regulatory_knowledge",
+            "arguments": {
+              "query": "中证融资服务中心最低保证金比例规则",
+              "issuer": null,
+              "as_of": "2025-12-31"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 1,
+      "temporal_total_count": 1,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "search_regulatory_knowledge",
+          "expected": {
+            "query": "截至 2025-12-31 的最低保证金比例规则",
+            "issuer": "中证融资服务中心",
+            "as_of": "2025-12-31"
+          },
+          "actual": {
+            "query": "中证融资服务中心最低保证金比例规则",
+            "issuer": null,
+            "as_of": "2025-12-31"
+          },
+          "correct": true,
+          "status": "acceptable",
+          "reason": "entity filter omitted but preserved verbatim in query"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "regulation_current_exchange",
+      "query": "查询东衡证券交易所当前有效的盘后固定价格交易细则",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_regulatory_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_regulatory_knowledge",
+            "arguments": {
+              "query": "当前有效的盘后固定价格交易细则",
+              "issuer": "东衡证券交易所"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "search_regulatory_knowledge",
+            "arguments": {
+              "query": "盘后固定价格交易细则",
+              "issuer": null,
+              "as_of": null
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": false,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "search_regulatory_knowledge",
+          "expected": {
+            "query": "当前有效的盘后固定价格交易细则",
+            "issuer": "东衡证券交易所"
+          },
+          "actual": {
+            "query": "盘后固定价格交易细则",
+            "issuer": null,
+            "as_of": null
+          },
+          "correct": false,
+          "status": "incorrect",
+          "reason": "required value or non-default argument differs"
+        }
+      ],
+      "error_reasons": [
+        "one or more required values or non-default arguments differ"
+      ]
+    },
+    {
+      "case_id": "regulation_historical_company",
+      "query": "检索澄海智造截至 2025-07-20 的业绩预告公告",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_regulatory_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_regulatory_knowledge",
+            "arguments": {
+              "query": "截至 2025-07-20 的业绩预告公告",
+              "issuer": "澄海智造",
+              "as_of": "2025-07-20"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": [
+          {
+            "tool_name": "search_regulatory_knowledge",
+            "arguments": {
+              "as_of": "2025-07-20"
+            }
+          }
+        ]
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "澄海智造业绩预告公告",
+              "companies": [
+                "澄海智造"
+              ],
+              "brokers": [],
+              "as_of": "2025-07-20"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": false,
+      "argument_correct": false,
+      "temporal_correct": false,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 1,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 1,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "search_regulatory_knowledge",
+          "expected": {
+            "query": "截至 2025-07-20 的业绩预告公告",
+            "issuer": "澄海智造",
+            "as_of": "2025-07-20"
+          },
+          "actual": null,
+          "correct": false,
+          "status": "incorrect",
+          "reason": "missing matching Tool instance"
+        }
+      ],
+      "error_reasons": [
+        "tool selection differs from selected expected plan",
+        "one or more required values or non-default arguments differ",
+        "temporal expectation differs",
+        "1 unnecessary Tool call(s)"
+      ]
+    },
+    {
+      "case_id": "faq_account",
+      "query": "开户需要哪些基本条件？",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_business_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "开户需要哪些基本条件？",
+              "category": "account"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "1",
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "开户需要哪些基本条件？",
+              "category": "account",
+              "as_of": null
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "search_business_knowledge",
+          "expected": {
+            "query": "开户需要哪些基本条件？",
+            "category": "account"
+          },
+          "actual": {
+            "query": "开户需要哪些基本条件？",
+            "category": "account",
+            "as_of": null
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "faq_trading_historical",
+      "query": "截至 2025-12-31，卖出股票后资金何时可以转出？",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_business_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "卖出股票后资金何时可以转出？",
+              "category": "trading",
+              "as_of": "2025-12-31"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": [
+          {
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "as_of": "2025-12-31"
+            }
+          }
+        ]
+      },
+      "actual_plan": {
+        "decision": "clarify",
+        "tasks": []
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": false,
+      "argument_correct": false,
+      "temporal_correct": false,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 1,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 0,
+      "argument_details": [
+        {
+          "tool_name": "search_business_knowledge",
+          "expected": {
+            "query": "卖出股票后资金何时可以转出？",
+            "category": "trading",
+            "as_of": "2025-12-31"
+          },
+          "actual": null,
+          "correct": false,
+          "status": "incorrect",
+          "reason": "missing matching Tool instance"
+        }
+      ],
+      "error_reasons": [
+        "tool selection differs from selected expected plan",
+        "one or more required values or non-default arguments differ",
+        "temporal expectation differs"
+      ]
+    },
+    {
+      "case_id": "faq_margin",
+      "query": "两融账户维持担保比例低于预警线怎么办？",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_business_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "两融账户维持担保比例低于预警线怎么办？",
+              "category": "margin"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "clarify",
+        "tasks": []
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": false,
+      "argument_correct": false,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 0,
+      "argument_details": [
+        {
+          "tool_name": "search_business_knowledge",
+          "expected": {
+            "query": "两融账户维持担保比例低于预警线怎么办？",
+            "category": "margin"
+          },
+          "actual": null,
+          "correct": false,
+          "status": "incorrect",
+          "reason": "missing matching Tool instance"
+        }
+      ],
+      "error_reasons": [
+        "tool selection differs from selected expected plan",
+        "one or more required values or non-default arguments differ"
+      ]
+    },
+    {
+      "case_id": "faq_product_feature",
+      "query": "新版条件单支持哪些有效期？",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_business_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "新版条件单支持哪些有效期？",
+              "category": "product_feature"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "1",
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "新版条件单支持哪些有效期？",
+              "category": "product_feature",
+              "as_of": null
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "search_business_knowledge",
+          "expected": {
+            "query": "新版条件单支持哪些有效期？",
+            "category": "product_feature"
+          },
+          "actual": {
+            "query": "新版条件单支持哪些有效期？",
+            "category": "product_feature",
+            "as_of": null
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "faq_risk_historical",
+      "query": "截至 2025-06-30，融资交易为什么会放大亏损？",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_business_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "融资交易为什么会放大亏损？",
+              "category": "risk_notice",
+              "as_of": "2025-06-30"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": [
+          {
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "as_of": "2025-06-30"
+            }
+          }
+        ]
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "融资交易为什么会放大亏损？",
+              "category": "risk_notice",
+              "as_of": null
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": false,
+      "temporal_correct": false,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 1,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "search_business_knowledge",
+          "expected": {
+            "query": "融资交易为什么会放大亏损？",
+            "category": "risk_notice",
+            "as_of": "2025-06-30"
+          },
+          "actual": {
+            "query": "融资交易为什么会放大亏损？",
+            "category": "risk_notice",
+            "as_of": null
+          },
+          "correct": false,
+          "status": "incorrect",
+          "reason": "required value or non-default argument differs"
+        }
+      ],
+      "error_reasons": [
+        "one or more required values or non-default arguments differ",
+        "temporal expectation differs"
+      ]
+    },
+    {
+      "case_id": "user_market_parallel",
+      "query": "并行查询 syn-user-0001 的持仓和 600519.SH 当前行情",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_portfolio_positions",
+          "get_market_snapshot"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            }
+          },
+          {
+            "tool_name": "get_market_snapshot",
+            "arguments": {
+              "symbol": "600519.SH"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "t2",
+            "tool_name": "get_market_snapshot",
+            "arguments": {
+              "symbol": "600519.SH"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 2,
+      "argument_details": [
+        {
+          "tool_name": "get_portfolio_positions",
+          "expected": {
+            "user_id": "syn-user-0001"
+          },
+          "actual": {
+            "user_id": "syn-user-0001"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "get_market_snapshot",
+          "expected": {
+            "symbol": "600519.SH"
+          },
+          "actual": {
+            "symbol": "600519.SH"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "user_market_rag_parallel",
+      "query": "同时获取 syn-user-0002 的组合分析、000001.SZ 当前行情和安岳银行研报",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_portfolio_analytics",
+          "get_market_snapshot",
+          "search_research_reports"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_portfolio_analytics",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            }
+          },
+          {
+            "tool_name": "get_market_snapshot",
+            "arguments": {
+              "symbol": "000001.SZ"
+            }
+          },
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "安岳银行研报",
+              "companies": [
+                "安岳银行"
+              ]
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_portfolio_analytics",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "t2",
+            "tool_name": "get_market_snapshot",
+            "arguments": {
+              "symbol": "000001.SZ"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "t3",
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "安岳银行研报",
+              "companies": [
+                "安岳银行"
+              ],
+              "brokers": [],
+              "as_of": null
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 3,
+      "argument_details": [
+        {
+          "tool_name": "get_portfolio_analytics",
+          "expected": {
+            "user_id": "syn-user-0002"
+          },
+          "actual": {
+            "user_id": "syn-user-0002"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "get_market_snapshot",
+          "expected": {
+            "symbol": "000001.SZ"
+          },
+          "actual": {
+            "symbol": "000001.SZ"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "search_research_reports",
+          "expected": {
+            "query": "安岳银行研报",
+            "companies": [
+              "安岳银行"
+            ]
+          },
+          "actual": {
+            "query": "安岳银行研报",
+            "companies": [
+              "安岳银行"
+            ],
+            "brokers": [],
+            "as_of": null
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    }
+  ]
+}

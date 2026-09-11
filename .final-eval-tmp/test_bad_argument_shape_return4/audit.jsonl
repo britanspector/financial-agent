@@ -1,0 +1,1 @@
+{"timestamp":"2026-09-11T07:16:11.395890Z","request_id":"48cd64db-73b5-4eb6-ae6a-b6eb2f7f35c4","tool":"get_customer_context","principal_id":"synthetic-full","user_id":null,"status":"error","code":"INVALID_ARGUMENT","http_status":422,"latency":0.06989999928919133}

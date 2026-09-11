@@ -1,0 +1,720 @@
+{
+  "metrics": {
+    "case_count": 10,
+    "executable_case_count": 9,
+    "abstention_case_count": 1,
+    "valid_plan_rate": 1.0,
+    "tool_selection_accuracy": 0.9,
+    "argument_accuracy": 0.9166666666666666,
+    "temporal_accuracy": 1.0,
+    "dependency_accuracy": 1.0,
+    "unnecessary_tool_call_rate": 0.07692307692307693
+  },
+  "cases": [
+    {
+      "case_id": "user_context",
+      "query": "查询 syn-user-0001 的客户资料",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_customer_context"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_customer_context",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_customer_context",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "get_customer_context",
+          "expected": {
+            "user_id": "syn-user-0001"
+          },
+          "actual": {
+            "user_id": "syn-user-0001"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "user_positions",
+      "query": "查询 syn-user-0002 的当前持仓",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_portfolio_positions"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "get_portfolio_positions",
+          "expected": {
+            "user_id": "syn-user-0002"
+          },
+          "actual": {
+            "user_id": "syn-user-0002"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "user_analytics_from_history",
+      "query": "查看他的组合分析",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_portfolio_analytics"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_portfolio_analytics",
+            "arguments": {
+              "user_id": "syn-user-0003"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_portfolio_analytics",
+            "arguments": {
+              "user_id": "syn-user-0003"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "get_portfolio_analytics",
+          "expected": {
+            "user_id": "syn-user-0003"
+          },
+          "actual": {
+            "user_id": "syn-user-0003"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "margin_current",
+      "query": "查询 syn-user-0001 的两融账户",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_margin_account"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_margin_account",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_customer_context",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "t2",
+            "tool_name": "get_margin_account",
+            "arguments": {
+              "user_id": "syn-user-0001",
+              "start_date": null,
+              "end_date": null,
+              "limit": 60,
+              "offset": 0
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": false,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 1,
+      "planned_task_count": 2,
+      "argument_details": [
+        {
+          "tool_name": "get_margin_account",
+          "expected": {
+            "user_id": "syn-user-0001"
+          },
+          "actual": {
+            "user_id": "syn-user-0001",
+            "start_date": null,
+            "end_date": null,
+            "limit": 60,
+            "offset": 0
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "tool selection differs from selected expected plan",
+        "1 unnecessary Tool call(s)"
+      ]
+    },
+    {
+      "case_id": "margin_history_dates",
+      "query": "查询 syn-user-0001 在 2026-05-01 到 2026-06-01 的两融历史",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_margin_account"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_margin_account",
+            "arguments": {
+              "user_id": "syn-user-0001",
+              "start_date": "2026-05-01",
+              "end_date": "2026-06-01"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": [
+          {
+            "tool_name": "get_margin_account",
+            "arguments": {
+              "start_date": "2026-05-01",
+              "end_date": "2026-06-01"
+            }
+          }
+        ]
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_margin_account",
+            "arguments": {
+              "user_id": "syn-user-0001",
+              "start_date": "2026-05-01",
+              "end_date": "2026-06-01",
+              "limit": 366,
+              "offset": 0
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": false,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 1,
+      "temporal_total_count": 1,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "get_margin_account",
+          "expected": {
+            "user_id": "syn-user-0001",
+            "start_date": "2026-05-01",
+            "end_date": "2026-06-01"
+          },
+          "actual": {
+            "user_id": "syn-user-0001",
+            "start_date": "2026-05-01",
+            "end_date": "2026-06-01",
+            "limit": 366,
+            "offset": 0
+          },
+          "correct": false,
+          "status": "incorrect",
+          "reason": "required value or non-default argument differs"
+        }
+      ],
+      "error_reasons": [
+        "one or more required values or non-default arguments differ"
+      ]
+    },
+    {
+      "case_id": "all_user_data_parallel",
+      "query": "并行给出 syn-user-0002 的资料、持仓、组合分析和两融账户",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_customer_context",
+          "get_portfolio_positions",
+          "get_portfolio_analytics",
+          "get_margin_account"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_customer_context",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            }
+          },
+          {
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            }
+          },
+          {
+            "tool_name": "get_portfolio_analytics",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            }
+          },
+          {
+            "tool_name": "get_margin_account",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_customer_context",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "t2",
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "t3",
+            "tool_name": "get_portfolio_analytics",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "t4",
+            "tool_name": "get_margin_account",
+            "arguments": {
+              "user_id": "syn-user-0002",
+              "start_date": null,
+              "end_date": null,
+              "limit": 60,
+              "offset": 0
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 4,
+      "argument_details": [
+        {
+          "tool_name": "get_customer_context",
+          "expected": {
+            "user_id": "syn-user-0002"
+          },
+          "actual": {
+            "user_id": "syn-user-0002"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "get_portfolio_positions",
+          "expected": {
+            "user_id": "syn-user-0002"
+          },
+          "actual": {
+            "user_id": "syn-user-0002"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "get_portfolio_analytics",
+          "expected": {
+            "user_id": "syn-user-0002"
+          },
+          "actual": {
+            "user_id": "syn-user-0002"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "get_margin_account",
+          "expected": {
+            "user_id": "syn-user-0002"
+          },
+          "actual": {
+            "user_id": "syn-user-0002",
+            "start_date": null,
+            "end_date": null,
+            "limit": 60,
+            "offset": 0
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "user_id_from_history",
+      "query": "再看一下持仓",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_portfolio_positions"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "get_portfolio_positions",
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "get_portfolio_positions",
+          "expected": {
+            "user_id": "syn-user-0001"
+          },
+          "actual": {
+            "user_id": "syn-user-0001"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "missing_user_id_abstain",
+      "query": "查询我的持仓",
+      "expectation": "abstain",
+      "expected_plan": {
+        "expected_tools": [],
+        "expected_arguments": [],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "clarify",
+        "tasks": []
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 0,
+      "argument_details": [],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "market_snapshot_maotai",
+      "query": "查询 600519.SH 当前行情",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_market_snapshot"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_market_snapshot",
+            "arguments": {
+              "symbol": "600519.SH"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_market_snapshot",
+            "arguments": {
+              "symbol": "600519.SH"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "get_market_snapshot",
+          "expected": {
+            "symbol": "600519.SH"
+          },
+          "actual": {
+            "symbol": "600519.SH"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "market_snapshot_pingan",
+      "query": "查询 000001.SZ 当前收盘快照",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_market_snapshot"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_market_snapshot",
+            "arguments": {
+              "symbol": "000001.SZ"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_market_snapshot",
+            "arguments": {
+              "symbol": "000001.SZ"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 1,
+      "argument_details": [
+        {
+          "tool_name": "get_market_snapshot",
+          "expected": {
+            "symbol": "000001.SZ"
+          },
+          "actual": {
+            "symbol": "000001.SZ"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    }
+  ]
+}

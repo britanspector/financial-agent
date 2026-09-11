@@ -1,0 +1,12 @@
+{
+  "schema_version": "0.1",
+  "model": "fixed-v1",
+  "dimension": 3,
+  "corpus_fingerprint": "c9057ad1f550e0a061c91b06898aeb249c46b93ccfe5700addced5b3e287fe18",
+  "chunk_ids": [
+    "RR-CHMZ-20250310-01::chunk-0000",
+    "RR-CHMZ-20250310-01::chunk-0001",
+    "RR-CHMZ-20250826-02::chunk-0000",
+    "RR-CHMZ-20250826-02::chunk-0001"
+  ]
+}

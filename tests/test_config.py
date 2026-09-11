@@ -44,6 +44,9 @@ def test_qwen_secret_and_model_defaults(monkeypatch):
     assert settings.qwen_embedding_model == "qwen3.7-text-embedding"
     assert settings.qwen_embedding_dimension == 1024
     assert settings.qwen_reranker_model == "qwen3.7-text-rerank"
+    assert settings.planner_model == "qwen3.7-flash"
+    assert settings.planner_temperature == 0.1
+    assert settings.planner_max_tasks == 12
     assert fake_key not in repr(settings)
     assert "qwen_api_key" not in settings.model_dump()
     assert fake_key not in settings.model_dump_json()

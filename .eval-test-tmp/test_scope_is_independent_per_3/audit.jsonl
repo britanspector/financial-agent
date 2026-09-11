@@ -1,0 +1,2 @@
+{"timestamp":"2026-09-11T06:06:59.753773Z","request_id":"b68cbd74-3bea-4529-a1d8-b5f2354381cb","tool":"get_portfolio_analytics","principal_id":"synthetic-analytics","user_id":"syn-user-0001","status":"success","code":"SUCCESS","http_status":200,"latency":1.8449999988661148}
+{"timestamp":"2026-09-11T06:06:59.754389Z","request_id":"0b33aeb4-3c57-468d-b3d5-dc596435d34f","tool":"get_portfolio_analytics","principal_id":"synthetic-context","user_id":null,"status":"error","code":"FORBIDDEN","http_status":403,"latency":0.03429999924264848}
