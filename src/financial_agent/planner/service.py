@@ -5,6 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Protocol
 
+from pydantic import BaseModel
+
 from financial_agent.planner.models import StructuredPlan
 from financial_agent.planner.prompt import build_planner_messages
 from financial_agent.planner.providers import PlannerProvider
@@ -14,6 +16,7 @@ from financial_agent.schemas import Schema, UserQuery
 class ToolCatalog(Protocol):
     def describe(self) -> list[dict]: ...
     def input_model(self, name: str) -> type[Schema] | None: ...
+    def output_model(self, name: str) -> type[BaseModel] | None: ...
 
 
 class StructuredPlanner:
@@ -46,14 +49,27 @@ def _tool_aware_response_schema(tools: list[dict[str, Any]]) -> dict[str, Any]:
             "tool_name": {},
             "arguments": {},
             "dependencies": {"type": "array", "items": {"type": "string"}},
+            "bindings": {
+                "type": "array",
+                "items": {
+                    "type": "object", "additionalProperties": False,
+                    "properties": {
+                        "target_parameter": {"type": "string", "minLength": 1},
+                        "source_task_id": {"type": "string", "minLength": 1},
+                        "source_path": {"type": "array", "minItems": 1,
+                                        "items": {"anyOf": [{"type": "string"}, {"type": "integer"}]}},
+                    },
+                    "required": ["target_parameter", "source_task_id", "source_path"],
+                },
+            },
         },
-        "required": ["task_id", "tool_name", "arguments", "dependencies"],
+        "required": ["task_id", "tool_name", "arguments", "dependencies", "bindings"],
     }
     branches = []
     for tool in tools:
         branch = deepcopy(task_base)
         branch["properties"]["tool_name"] = {"const": tool["name"]}
-        branch["properties"]["arguments"] = _strictify_object_schema(tool["input_schema"])
+        branch["properties"]["arguments"] = _binding_aware_object_schema(tool["input_schema"])
         branches.append(branch)
 
     execute = {
@@ -98,4 +114,21 @@ def _strictify_object_schema(schema: dict[str, Any]) -> dict[str, Any]:
     for combinator in ("anyOf", "oneOf", "allOf"):
         if combinator in result:
             result[combinator] = [_strictify_object_schema(value) for value in result[combinator]]
+    return result
+
+
+def _binding_aware_object_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Keep strict decoding while permitting ``null`` placeholders for bindings.
+
+    Strict decoders require all object properties, including a required source
+    parameter that will only exist after its upstream task runs.  A bound
+    property may therefore be emitted as null; validation deliberately ignores
+    that placeholder and runtime replaces it with the resolved public result.
+    """
+    result = _strictify_object_schema(schema)
+    if "properties" in result:
+        result["properties"] = {
+            name: {"anyOf": [value, {"type": "null"}]}
+            for name, value in result["properties"].items()
+        }
     return result

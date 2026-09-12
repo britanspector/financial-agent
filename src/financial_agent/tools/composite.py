@@ -32,6 +32,10 @@ class CompositeToolRegistry:
         registry = self._routes.get(name)
         return registry.input_model(name) if registry is not None else None
 
+    def output_model(self, name: str):
+        registry = self._routes.get(name)
+        return registry.output_model(name) if registry is not None else None
+
     def invoke(
         self,
         name: str,
