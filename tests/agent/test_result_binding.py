@@ -6,6 +6,7 @@ from uuid import uuid4
 from financial_agent.agent.graph import run_execution_graph
 from financial_agent.agent.models import ResultBinding
 from financial_agent.agent.orchestrator import run_planner_execution
+from financial_agent.agent.retry import RetryPolicy
 from financial_agent.market_data.models import MarketSnapshot, MarketSnapshotInput
 from financial_agent.planner.models import PlannedTask, StructuredPlan
 from financial_agent.planner.service import StructuredPlanner
@@ -134,6 +135,52 @@ def test_failed_upstream_binding_blocks_downstream_and_independent_branch_runs_i
     assert state.final_output.task_results[1].result.error.code == "DEPENDENCY_FAILED"
 
 
+class RetryBindingService(BindingService):
+    def __init__(self):
+        super().__init__()
+        self.second_arguments = []
+        self.second_request_ids = []
+
+    def execute(self, spec, arguments, *, context, request_id=None):
+        if spec.name == "second":
+            self.calls.append(spec.name)
+            self.second_arguments.append(dict(arguments))
+            self.second_request_ids.append(request_id)
+            if len(self.second_arguments) < 3:
+                return ToolResult(
+                    status="error", data=None, source="test", latency=0,
+                    error=ToolError(
+                        code="TEMPORARY_FAILURE", message="temporary", http_status=503, retryable=True,
+                    ),
+                    request_id=request_id,
+                )
+            return ToolResult(
+                status="success", data={"value": arguments["value"]}, source="test", latency=0,
+                error=None, request_id=request_id,
+            )
+        return super().execute(spec, arguments, context=context, request_id=request_id)
+
+
+def test_retry_reuses_resolved_binding_without_reexecuting_upstream():
+    service = RetryBindingService()
+    registry = catalog(service)
+    compiled = PlanValidator(registry).validate(StructuredPlan(decision="execute", tasks=[
+        planned("source", "first", {"value": 7}),
+        planned("sink", "second", bindings=[binding("value", "source", "value")]),
+    ])).tasks
+
+    state = run_execution_graph(
+        UserQuery(query="stable binding"), compiled, registry, sleeper=lambda _: None,
+    )
+
+    assert service.calls.count("first") == 1
+    assert service.calls.count("second") == 3
+    assert service.second_arguments == [{"value": 7}] * 3
+    assert len(set(service.second_request_ids)) == 3
+    assert state.final_output.task_results[1].retry_count == 2
+    assert state.final_output.iteration_count == 3
+
+
 class E2EService:
     def execute(self, spec, arguments, *, context, request_id=None):
         del context, request_id
@@ -162,6 +209,13 @@ def test_unified_e2e_queries_largest_position_latest_quote():
     from financial_agent.tools.composite import merge_registries
     registry = merge_registries(user, market)
     planner = StructuredPlanner(FixedPlanner(), registry)
-    final = run_planner_execution(UserQuery(query="查询 syn-user-0001 最大仓位股票的最新行情"), planner, PlanValidator(registry), registry)
+    final = run_planner_execution(
+        UserQuery(query="查询 syn-user-0001 最大仓位股票的最新行情"),
+        planner,
+        PlanValidator(registry),
+        registry,
+        retry_policy=RetryPolicy(max_retry=0),
+    )
     assert final.status == "success"
     assert final.task_results[1].result.data["symbol"] == "600519.SH"
+    assert all(item.max_retry == 0 for item in final.task_results)

@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     planner_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     planner_temperature: float = Field(default=0.1, ge=0, le=2)
     planner_max_tasks: int = Field(default=12, ge=1, le=100)
+    execution_max_retry: int = Field(default=2, ge=0, le=100)
+    execution_initial_backoff_seconds: float = Field(default=0.5, ge=0, le=300)
+    execution_backoff_multiplier: float = Field(default=2.0, ge=1, le=100)
+    execution_max_attempts: int = Field(default=36, ge=1, le=10_000)
+    execution_deadline_seconds: float = Field(default=120.0, gt=0, le=86_400)
     qwen_embedding_batch_size: int = Field(default=20, ge=1, le=20)
     qwen_embedding_query_instruct: str = "Retrieve relevant passages from a financial knowledge base."
     qwen_reranker_instruct: str = "Given a financial search query, retrieve passages that answer the query."

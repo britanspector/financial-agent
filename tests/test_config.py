@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from financial_agent.config import Settings
+from financial_agent.agent.retry import RetryPolicy
 
 
 def test_defaults_need_no_api_key():
@@ -47,6 +48,11 @@ def test_qwen_secret_and_model_defaults(monkeypatch):
     assert settings.planner_model == "qwen3.7-flash"
     assert settings.planner_temperature == 0.1
     assert settings.planner_max_tasks == 12
+    assert settings.execution_max_retry == 2
+    assert settings.execution_initial_backoff_seconds == 0.5
+    assert settings.execution_backoff_multiplier == 2.0
+    assert settings.execution_max_attempts == 36
+    assert settings.execution_deadline_seconds == 120.0
     assert fake_key not in repr(settings)
     assert "qwen_api_key" not in settings.model_dump()
     assert fake_key not in settings.model_dump_json()
@@ -58,3 +64,36 @@ def test_flash_rejects_unsupported_embedding_dimension(monkeypatch):
 
     with pytest.raises(ValidationError):
         Settings()
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("EXECUTION_MAX_RETRY", "-1"),
+        ("EXECUTION_BACKOFF_MULTIPLIER", "0.5"),
+        ("EXECUTION_MAX_ATTEMPTS", "0"),
+        ("EXECUTION_DEADLINE_SECONDS", "0"),
+    ],
+)
+def test_invalid_execution_retry_settings_rejected(monkeypatch, key, value):
+    monkeypatch.setenv(f"FINANCIAL_AGENT_{key}", value)
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_retry_policy_is_built_from_execution_settings(monkeypatch):
+    monkeypatch.setenv("FINANCIAL_AGENT_EXECUTION_MAX_RETRY", "3")
+    monkeypatch.setenv("FINANCIAL_AGENT_EXECUTION_INITIAL_BACKOFF_SECONDS", "0.25")
+    monkeypatch.setenv("FINANCIAL_AGENT_EXECUTION_BACKOFF_MULTIPLIER", "3")
+    monkeypatch.setenv("FINANCIAL_AGENT_EXECUTION_MAX_ATTEMPTS", "20")
+    monkeypatch.setenv("FINANCIAL_AGENT_EXECUTION_DEADLINE_SECONDS", "45")
+
+    policy = RetryPolicy.from_settings(Settings())
+
+    assert policy == RetryPolicy(
+        max_retry=3,
+        initial_backoff_seconds=0.25,
+        backoff_multiplier=3,
+        max_attempts=20,
+        deadline_seconds=45,
+    )

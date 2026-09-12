@@ -2,7 +2,7 @@
 
 用于深度学习和求职展示的本地多工具 Agent 工程探索。全部用户数据为 synthetic，不连接真实公司内部系统。
 
-**当前阶段：Phase 3.2 Result Binding + Unified Execution 实现完成。** 现有 4 个用户数据 Tool、2 个行情 Tool 和 3 个 RAG Tool 的公开契约可供 Planner 选用；Qwen Planner 生成结构化 Task DAG，确定性 Validator 编译安全的上游结果绑定后进入既有 Phase 2 执行图。
+**当前阶段：Phase 4.1 Execution Retry 实现完成。** 现有 4 个用户数据 Tool、2 个行情 Tool 和 3 个 RAG Tool 的公开契约可供 Planner 选用；Qwen Planner 生成结构化 Task DAG，确定性 Validator 编译安全的上游结果绑定，执行图会在单个 Task 内对明确标记为 retryable 的 Tool 错误进行有界重试。
 
 ## 项目结构与依赖
 
@@ -176,6 +176,19 @@ Phase 2 使用调用方人工构造的 `Task(task_id, tool_name, arguments, depe
 
 Graph 拓扑为 `START → dispatcher → execute_tool → collect_results → dispatcher`，完成后进入 `finalize → END`。Dispatcher 每轮通过 LangGraph `Send` 将所有无未完成依赖的 Task 并行 fan-out；`tool_results` 和 `errors` reducer 只接收节点产生的增量，`collect_results` 不重写已有 Result Pool。依赖失败会生成 `DEPENDENCY_FAILED` 并阻断下游；无法解析的依赖通过错误 reason 区分 `missing_dependency` 和 `cycle_or_deadlock`。
 
+Phase 4.1 的 Retry 完全位于单次 `execute_tool` 节点内部，不会重新调度 LangGraph 节点。默认每个 Task 在首次 attempt 失败后最多重试 2 次，指数退避为 0.5 秒、1.0 秒；只有 `ToolResult.status=error` 且 `error.retryable=true` 才会重试。Binding 在 Task 进入执行节点前只解析和校验一次，所有 attempt 复用同一份参数；重试不会重新执行上游 Task。
+
+全图默认最多开始 36 次真实 Tool attempt。120 秒 deadline 的准确语义是：deadline 到达后禁止开始新的 Tool attempt，它不是强制终止时间，也不会杀掉已经开始的同步 Tool。因此整个 graph 的实际完成时间可能略超过 120 秒。若 Task 已有真实失败结果但无法开始下一次 retry，最终保留最后一次真实 Tool 错误；只有首次 attempt 尚未开始就被预算阻止时才返回 `EXECUTION_BUDGET_EXCEEDED`。退避等待计入 deadline。
+
+`TaskExecutionResult.retry_count` 表示首次 attempt 之后实际发生的重试次数，`max_retry` 表示本次执行策略上限。`FinalResult` 额外返回 `attempt_count`、`execution_duration_ms`、`attempt_budget_exhausted` 和 `deadline_exceeded`。策略可由 `FINANCIAL_AGENT_EXECUTION_MAX_RETRY`、`FINANCIAL_AGENT_EXECUTION_INITIAL_BACKOFF_SECONDS`、`FINANCIAL_AGENT_EXECUTION_BACKOFF_MULTIPLIER`、`FINANCIAL_AGENT_EXECUTION_MAX_ATTEMPTS`、`FINANCIAL_AGENT_EXECUTION_DEADLINE_SECONDS` 配置，并显式传入执行入口：
+
+```python
+from financial_agent.agent import RetryPolicy
+
+retry_policy = RetryPolicy.from_settings(settings)
+state = run_execution_graph(request, tasks, registry, retry_policy=retry_policy)
+```
+
 `CompositeToolRegistry` / `merge_registries()` 仅按工具名路由到原有 User、Market、RAG Registry，不修改 Phase 1 `ToolRegistry` 的注册、校验、鉴权、审计或错误行为。完整运行时可通过 `build_agent_tools(settings)` 组合全部 9 个 Tool；对应的行情和 RAG Provider 仍要求环境变量凭证及已构建的 embedding index。
 
 ```python
@@ -222,7 +235,7 @@ Phase 3.1 在执行图之外新增 `financial_agent.planner`。`StructuredPlanne
 
 `PlanValidator` 不调用模型或 Tool，只保证计划合法可执行。Phase 3.2 的 `bindings` 使用结构化 `{target_parameter, source_task_id, source_path}`；`source_path` 固定从上游 `ToolResult.data` 开始，只允许该 Tool `output_model` 公开 Pydantic 契约中的字段名和非负 list index，不支持 JSONPath 或表达式。因此 Planner 不能读取 `ToolResult.status/error/request_id`，也不能遍历 service/provider 的内部字段。Validator 检查 source task、禁止自身/重复 target、字段白名单、静态类型兼容和包含 binding edge 的 cycle，并把 binding source 自动置为依赖（优先于手写 dependency）。校验成功时转换为现有 Phase 2 `Task`；clarify/no_tool 成功时返回空 Task。旧的 `$t1.result...` 字符串引用会被拒绝。
 
-执行前，Phase 2 dispatcher 在所有上游 dependency 成功后才解析 binding，将真实值写入 arguments，并重新以 Tool input schema 校验；解析失败会产生控制面错误，上游 Tool 失败则下游不会执行。统一入口为 `financial_agent.agent.orchestrator.run_planner_execution(request, planner, validator, registry)`，完整串通 `query/history → Planner → validate/binding compile → graph execution → FinalResult`。第一版只支持标量或完整 list 字段、任意长度的显式 DAG 链；不含复杂表达式、Retry、Verifier/Replan 或 Context Manager。
+执行前，Phase 2 dispatcher 在所有上游 dependency 成功后才解析 binding，将真实值写入 arguments，并重新以 Tool input schema 校验；解析失败会产生控制面错误，上游 Tool 失败则下游不会执行。统一入口为 `financial_agent.agent.orchestrator.run_planner_execution(request, planner, validator, registry)`，完整串通 `query/history → Planner → validate/binding compile → graph execution → FinalResult`。第一版只支持标量或完整 list 字段、任意长度的显式 DAG 链；Phase 4.1 已加入 Tool Execution Retry，但仍不含复杂表达式、语义 Verifier/Replan 或 Context Manager。
 
 固定 Planner Eval Set 位于 `eval/planner/planner_cases.jsonl`，共 40 条独立 JSONL case，不从 prompt、模型输出或源码反推期望。每条都包含 query、完整 history、expected_tools、expected_arguments、expected_dependencies、temporal_expectation、forbidden_tools；可用 `acceptable_plans` 声明多套等价 Tool/参数/依赖 pattern。case 不保存或匹配模型生成的 task ID，依赖只按上游/下游 Tool edge 比较。4 条信息不足或歧义 case 标记为 `abstain`，要求不调用 Tool、不编造参数；它们不进入 executable valid plan rate 的分母。
 
@@ -342,6 +355,7 @@ registry = register_user_tools(UserDataService(
 - Phase 1.4（2026-09-11）：151 个默认测试、2 个 integration tests、5 个 live tests 全部通过；真实 Qwen 3.7 retrieval eval 为 Hit@1 0.9583、Hit@5 1.0000、MRR 0.9792、Recall@5 1.0000。
 - Phase 2（2026-09-11）：162 个默认测试和 2 个 integration tests 通过；LangGraph 单任务、并行、依赖、失败阻断、未知 Tool、非法参数、增量 Result Pool 和不可解析依赖均为离线测试。
 - Phase 3.1 final optimization（2026-09-11）：Planner policy 明确了提供合法标识时不得 clarify、synthetic 实体原样保留、Tool 域优先级、显式顺序依赖和统一 temporal policy；末尾 checklist 进一步强调多实体合并检索、公告/规则路由及 date/dependency 必须落实。Eval 对语义等价 query 与 query 中保留的 entity filter 评分为 acceptable，同时继续严格比较标识、类别与日期。固定 40 条真实 Eval 的 valid plan rate 1.0000、tool selection accuracy 0.8250、argument accuracy 0.7800、temporal accuracy 0.7500、dependency accuracy 0.9000、unnecessary tool call rate 0.0638；完整逐 case 报告见 `reports/phase3_planner_policy_checklist_40.md`。
+- Phase 4.1（2026-09-12）：222 个默认测试通过；Execution Retry 覆盖 retryable/non-retryable 分类、指数退避、全图 attempt 预算、soft deadline、并行预算隔离和 Binding 参数稳定性。
 - 覆盖四个业务 Tool、FastAPI endpoint、Async HTTP Client、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
 - Market Data 测试使用 `httpx.MockTransport`，不访问 live provider；live smoke test 使用 `pytest -m live` 单独运行。
 
@@ -357,14 +371,16 @@ registry = register_user_tools(UserDataService(
 - LangGraph execution/control plane、人工 Task DAG、并行 ready-task fan-out、依赖失败阻断和结构化 FinalResult。
 - 不侵入现有 Registry 的 9 Tool 组合路由，完整保留 ToolResult 与 retryable 信息。
 - Provider 解耦的 Structured Planner、严格 Task DAG schema、Qwen 3.7 Flash adapter 和执行前确定性 PlanValidator。
+- 单个 Task 内的有界 Tool Retry、指数退避、全图 attempt 预算和禁止新 attempt 的 soft deadline。
+- 结构化 Result Binding、公开输出字段白名单、运行期结果路径解析和 plan → validate → execute 统一入口。
 - Prompt-independent 的 40 条 Planner Eval Set：单/并行/依赖、三源组合、当前/历史时间、RAG filters、法规、FAQ、无关 Tool 与 abstain 边界，以及六项离线/真实模型通用指标。
 
 ## 已知限制
 
-- 尚无 Result Binding、Retry、Verifier、Rewrite/Replan、Context Manager 或 Agentic RL。
-- dependencies 本轮只控制执行顺序，尚未定义将上游 ToolResult 绑定到下游 arguments 的表达式与解析规则。
-- clarify/no_tool 只表达 Planner 决策；本阶段仍未实现面向用户的澄清文案或 Result Binding。
-- Planner 尚未接入 execution graph；调用方需要先 plan、validate，再显式把通过校验的 tasks 交给 Phase 2 graph。
+- 尚无 Verifier、Rewrite/Replan、Context Manager 或 Agentic RL。
+- Result Binding 只支持公开结果中的字段名和非负 list index，不支持 JSONPath、表达式或复杂变换。
+- clarify/no_tool 只表达 Planner 决策；本阶段仍未实现面向用户的澄清文案。
+- 统一入口已连接 Planner、Validator 与 execution graph，但尚未生成面向用户的草稿答案。
 - Eval Set 对 Tool/参数/依赖边做固定语义匹配，但尚未覆盖同义 query rewrite、重复同名 Tool 实例的边身份、统计置信区间、成本和延迟。
 - Graph 尚未提供持久化 checkpoint、跨进程恢复、任务取消或生产级并发配额。
 - 真实 Qwen index 和 live smoke test 依赖宿主通过环境变量提供 API Key；默认测试不会访问外网。
@@ -376,6 +392,6 @@ registry = register_user_tools(UserDataService(
 
 ## 下一步
 
-Phase 3.2 优先定义 Result Binding 的类型化表达式、上游结果字段白名单、binding 解析/校验和缺失值行为，再把 plan → validate → execute 组合成不改变 Phase 2 调度语义的入口。之后再独立设计澄清、retry、Verifier、replan 和 context 管理。
+Phase 4.2 将新增 Structured Verifier，基于 query、已执行 Plan、Tool Results 和调用方草稿判断现有证据是否足以回答问题；自动 Rewrite/Replan 和 context 管理留到后续阶段。
 
 后续工程约束：外部模型和数据源必须经 adapter/registry，LangGraph node 不直接依赖 provider SDK；API key 仅由环境配置注入；所有用户数据为 synthetic；每个功能补测试，并同步更新 README 的“当前能力 / 已知限制 / 下一步”。

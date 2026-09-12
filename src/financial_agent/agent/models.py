@@ -44,6 +44,14 @@ class TaskExecutionResult(Schema):
     task_id: str
     tool_name: str
     result: ToolResult[Any]
+    retry_count: int = Field(default=0, ge=0)
+    max_retry: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def retry_count_within_limit(self):
+        if self.retry_count > self.max_retry:
+            raise ValueError("retry_count cannot exceed max_retry")
+        return self
 
 
 class AgentError(Schema):
@@ -61,6 +69,10 @@ class FinalResult(Schema):
     task_results: list[TaskExecutionResult]
     errors: list[AgentError]
     iteration_count: int = Field(ge=0)
+    attempt_count: int = Field(default=0, ge=0)
+    execution_duration_ms: float = Field(default=0, ge=0, allow_inf_nan=False)
+    attempt_budget_exhausted: bool = False
+    deadline_exceeded: bool = False
 
 
 class AgentState(Schema):
