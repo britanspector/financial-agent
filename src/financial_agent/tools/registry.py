@@ -41,5 +41,15 @@ class ToolRegistry:
             for spec in self._tools.values()
         ]
 
+    def input_model(self, name: str) -> type[Schema] | None:
+        """Expose the public argument contract without exposing service internals."""
+        spec = self._tools.get(name)
+        return spec.input_model if spec is not None else None
+
+    def output_model(self, name: str) -> type[BaseModel] | None:
+        """Expose the public result contract for safe result binding."""
+        spec = self._tools.get(name)
+        return spec.output_model if spec is not None else None
+
     def invoke(self, name: str, arguments: object, *, context: CallContext, request_id: UUID | None = None) -> ToolResult:
         return self._service.execute(self._tools.get(name), arguments, context=context, request_id=request_id)

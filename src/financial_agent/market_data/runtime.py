@@ -12,11 +12,11 @@ from financial_agent.tools.registry import ToolRegistry, ToolSpec
 def register_market_tools(service: MarketDataService) -> ToolRegistry:
     registry = ToolRegistry(service)
     registry.register(ToolSpec(
-        "get_market_snapshot", "Read the current A-share market snapshot",
+        "get_market_snapshot", "Read the latest available A-share stock daily close; not real-time, index, news, FX, or prediction data",
         MarketSnapshotInput, MarketSnapshot, None, "market_snapshot",
     ))
     registry.register(ToolSpec(
-        "get_market_history", "Read unadjusted daily A-share market history",
+        "get_market_history", "Read unadjusted A-share stock daily historical prices; not index, real-time, news, FX, or prediction data",
         MarketHistoryInput, MarketHistory, None, "market_history",
     ))
     return registry

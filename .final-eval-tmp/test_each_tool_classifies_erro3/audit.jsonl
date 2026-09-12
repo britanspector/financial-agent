@@ -1,0 +1,1 @@
+{"timestamp":"2026-09-11T07:16:08.271119Z","request_id":"6e04809c-0843-4571-98f8-026d9574044e","tool":"get_portfolio_analytics","principal_id":null,"user_id":null,"status":"error","code":"UNAUTHORIZED","http_status":401,"latency":0.02499999936844688}

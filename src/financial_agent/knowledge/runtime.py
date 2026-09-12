@@ -22,7 +22,7 @@ def register_rag_tools(service: KnowledgeRetrievalService) -> ToolRegistry:
     registry = ToolRegistry(service)
     registry.register(ToolSpec(
         "search_research_reports",
-        "Search research-report evidence with company, broker, and publication-time filters",
+        "Search research-report evidence with company, broker, and publication-time filters; reports are not real-time news",
         ResearchSearchInput,
         EvidenceList,
         None,
@@ -30,7 +30,7 @@ def register_rag_tools(service: KnowledgeRetrievalService) -> ToolRegistry:
     ))
     registry.register(ToolSpec(
         "search_regulatory_knowledge",
-        "Search announcement and regulatory evidence with issuer and effective-time filters",
+        "Search regulatory knowledge for laws, regulator announcements, supervision, and suitability rules with issuer and effective-time filters",
         RegulatorySearchInput,
         EvidenceList,
         None,
@@ -38,7 +38,7 @@ def register_rag_tools(service: KnowledgeRetrievalService) -> ToolRegistry:
     ))
     registry.register(ToolSpec(
         "search_business_knowledge",
-        "Search business FAQ evidence with category and effective-time filters",
+        "Search business FAQ knowledge for business processes and product explanations with category and effective-time filters",
         BusinessSearchInput,
         EvidenceList,
         None,

@@ -1,0 +1,2 @@
+{"timestamp":"2026-09-11T07:15:58.536829Z","request_id":"eaa95419-1be6-4b3e-a809-e9eb5d64ad3c","tool":"get_customer_context","principal_id":null,"user_id":null,"status":"error","code":"UNAUTHORIZED","http_status":401,"latency":0.09730000056151766}
+{"timestamp":"2026-09-11T07:15:58.547045Z","request_id":"155232a3-87e7-49cf-944d-c92080cef6d7","tool":"get_customer_context","principal_id":"http-test","user_id":"syn-user-999","status":"error","code":"NOT_FOUND","http_status":404,"latency":3.2792000001791166}

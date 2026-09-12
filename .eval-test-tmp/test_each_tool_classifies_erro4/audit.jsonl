@@ -1,0 +1,1 @@
+{"timestamp":"2026-09-11T06:06:56.997917Z","request_id":"2b718b95-9659-42e7-b6fd-7b132c5374cf","tool":"get_customer_context","principal_id":null,"user_id":null,"status":"error","code":"UNAUTHORIZED","http_status":401,"latency":0.03999999898951501}

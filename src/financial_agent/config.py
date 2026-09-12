@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     qwen_reranker_model: Literal["qwen3.7-text-rerank"] = "qwen3.7-text-rerank"
     qwen_reranker_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
     qwen_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    planner_model: str = Field(default="qwen3.7-flash", min_length=1)
+    planner_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    planner_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    planner_temperature: float = Field(default=0.1, ge=0, le=2)
+    planner_max_tasks: int = Field(default=12, ge=1, le=100)
     qwen_embedding_batch_size: int = Field(default=20, ge=1, le=20)
     qwen_embedding_query_instruct: str = "Retrieve relevant passages from a financial knowledge base."
     qwen_reranker_instruct: str = "Given a financial search query, retrieve passages that answer the query."

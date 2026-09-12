@@ -1,0 +1,2 @@
+{"timestamp":"2026-09-11T07:16:10.679137Z","request_id":"a1b1b9ef-9f25-4ee8-ac00-43189f995e57","tool":"get_customer_context","principal_id":"synthetic-context","user_id":"syn-user-0001","status":"success","code":"SUCCESS","http_status":200,"latency":1.3628000015160069}
+{"timestamp":"2026-09-11T07:16:10.679717Z","request_id":"0f14d030-5ced-45da-ac54-9b741855a582","tool":"get_customer_context","principal_id":"synthetic-margin","user_id":null,"status":"error","code":"FORBIDDEN","http_status":403,"latency":0.02409999979136046}

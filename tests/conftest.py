@@ -13,6 +13,7 @@ def isolated_settings(monkeypatch, tmp_path, request):
         if is_live and (
             upper_key == "FINANCIAL_AGENT_TUSHARE_TOKEN"
             or upper_key.startswith("FINANCIAL_AGENT_QWEN_")
+            or upper_key.startswith("FINANCIAL_AGENT_PLANNER_")
         ):
             continue
         if upper_key.startswith("FINANCIAL_AGENT_"):

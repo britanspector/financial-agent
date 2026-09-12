@@ -1,0 +1,857 @@
+{
+  "metrics": {
+    "case_count": 10,
+    "executable_case_count": 7,
+    "abstention_case_count": 3,
+    "valid_plan_rate": 1.0,
+    "tool_selection_accuracy": 0.7,
+    "argument_accuracy": 0.6666666666666666,
+    "temporal_accuracy": 1.0,
+    "dependency_accuracy": 0.6,
+    "unnecessary_tool_call_rate": 0.13333333333333333
+  },
+  "cases": [
+    {
+      "case_id": "profile_then_faq_dependency",
+      "query": "先查询 syn-user-0001 的客户资料，再查询风险等级不匹配时能否购买产品的说明",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_customer_context",
+          "search_business_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_customer_context",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            }
+          },
+          {
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "风险等级不匹配时能否购买产品的说明",
+              "category": "risk_notice"
+            }
+          }
+        ],
+        "expected_dependencies": [
+          {
+            "upstream_tool": "get_customer_context",
+            "downstream_tool": "search_business_knowledge"
+          }
+        ],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_customer_context",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "t2",
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "风险等级不匹配时能否购买产品的说明",
+              "category": null,
+              "as_of": null
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": false,
+      "temporal_correct": true,
+      "dependency_correct": false,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 0.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 2,
+      "argument_details": [
+        {
+          "tool_name": "get_customer_context",
+          "expected": {
+            "user_id": "syn-user-0001"
+          },
+          "actual": {
+            "user_id": "syn-user-0001"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "search_business_knowledge",
+          "expected": {
+            "query": "风险等级不匹配时能否购买产品的说明",
+            "category": "risk_notice"
+          },
+          "actual": {
+            "query": "风险等级不匹配时能否购买产品的说明",
+            "category": null,
+            "as_of": null
+          },
+          "correct": false,
+          "status": "incorrect",
+          "reason": "required value or non-default argument differs"
+        }
+      ],
+      "error_reasons": [
+        "one or more required values or non-default arguments differ",
+        "dependency edges differ"
+      ]
+    },
+    {
+      "case_id": "margin_and_regulation_parallel",
+      "query": "并行查询 syn-user-0003 的两融账户与当前最低保证金比例规则",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_margin_account",
+          "search_regulatory_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_margin_account",
+            "arguments": {
+              "user_id": "syn-user-0003"
+            }
+          },
+          {
+            "tool_name": "search_regulatory_knowledge",
+            "arguments": {
+              "query": "当前最低保证金比例规则",
+              "issuer": "中证融资服务中心"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_margin_account",
+            "arguments": {
+              "user_id": "syn-user-0003",
+              "start_date": null,
+              "end_date": null,
+              "limit": 60,
+              "offset": 0
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "t2",
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "当前最低保证金比例规则",
+              "category": "margin",
+              "as_of": null
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": false,
+      "argument_correct": false,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 1,
+      "planned_task_count": 2,
+      "argument_details": [
+        {
+          "tool_name": "get_margin_account",
+          "expected": {
+            "user_id": "syn-user-0003"
+          },
+          "actual": {
+            "user_id": "syn-user-0003",
+            "start_date": null,
+            "end_date": null,
+            "limit": 60,
+            "offset": 0
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "search_regulatory_knowledge",
+          "expected": {
+            "query": "当前最低保证金比例规则",
+            "issuer": "中证融资服务中心"
+          },
+          "actual": null,
+          "correct": false,
+          "status": "incorrect",
+          "reason": "missing matching Tool instance"
+        }
+      ],
+      "error_reasons": [
+        "tool selection differs from selected expected plan",
+        "one or more required values or non-default arguments differ",
+        "1 unnecessary Tool call(s)"
+      ]
+    },
+    {
+      "case_id": "positions_then_research_dependency",
+      "query": "先查 syn-user-0001 的持仓，再查看截至 2026-06-30 的澄海智造研报",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_portfolio_positions",
+          "search_research_reports"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            }
+          },
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "截至 2026-06-30 的澄海智造研报",
+              "companies": [
+                "澄海智造"
+              ],
+              "as_of": "2026-06-30"
+            }
+          }
+        ],
+        "expected_dependencies": [
+          {
+            "upstream_tool": "get_portfolio_positions",
+            "downstream_tool": "search_research_reports"
+          }
+        ],
+        "temporal_expectation": [
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "as_of": "2026-06-30"
+            }
+          }
+        ]
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "t2",
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "澄海智造研报",
+              "companies": [
+                "Caihai Intelligent Manufacturing"
+              ],
+              "brokers": [],
+              "as_of": "2026-06-30"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": false,
+      "temporal_correct": true,
+      "dependency_correct": false,
+      "temporal_correct_count": 1,
+      "temporal_total_count": 1,
+      "dependency_score": 0.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 2,
+      "argument_details": [
+        {
+          "tool_name": "get_portfolio_positions",
+          "expected": {
+            "user_id": "syn-user-0001"
+          },
+          "actual": {
+            "user_id": "syn-user-0001"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "search_research_reports",
+          "expected": {
+            "query": "截至 2026-06-30 的澄海智造研报",
+            "companies": [
+              "澄海智造"
+            ],
+            "as_of": "2026-06-30"
+          },
+          "actual": {
+            "query": "澄海智造研报",
+            "companies": [
+              "Caihai Intelligent Manufacturing"
+            ],
+            "brokers": [],
+            "as_of": "2026-06-30"
+          },
+          "correct": false,
+          "status": "incorrect",
+          "reason": "required value or non-default argument differs"
+        }
+      ],
+      "error_reasons": [
+        "one or more required values or non-default arguments differ",
+        "dependency edges differ"
+      ]
+    },
+    {
+      "case_id": "three_source_parallel",
+      "query": "并行查询 syn-user-0001 的持仓、600519.SH 当前行情和截至 2026-05-01 的澄海智造研报",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_portfolio_positions",
+          "get_market_snapshot",
+          "search_research_reports"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            }
+          },
+          {
+            "tool_name": "get_market_snapshot",
+            "arguments": {
+              "symbol": "600519.SH"
+            }
+          },
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "截至 2026-05-01 的澄海智造研报",
+              "companies": [
+                "澄海智造"
+              ],
+              "as_of": "2026-05-01"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": [
+          {
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "as_of": "2026-05-01"
+            }
+          }
+        ]
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "t2",
+            "tool_name": "get_market_snapshot",
+            "arguments": {
+              "symbol": "600519.SH"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "t3",
+            "tool_name": "search_research_reports",
+            "arguments": {
+              "query": "澄海智造研报",
+              "companies": [
+                "澄海智造"
+              ],
+              "brokers": [],
+              "as_of": "2026-05-01"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 1,
+      "temporal_total_count": 1,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 3,
+      "argument_details": [
+        {
+          "tool_name": "get_portfolio_positions",
+          "expected": {
+            "user_id": "syn-user-0001"
+          },
+          "actual": {
+            "user_id": "syn-user-0001"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "get_market_snapshot",
+          "expected": {
+            "symbol": "600519.SH"
+          },
+          "actual": {
+            "symbol": "600519.SH"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "search_research_reports",
+          "expected": {
+            "query": "截至 2026-05-01 的澄海智造研报",
+            "companies": [
+              "澄海智造"
+            ],
+            "as_of": "2026-05-01"
+          },
+          "actual": {
+            "query": "澄海智造研报",
+            "companies": [
+              "澄海智造"
+            ],
+            "brokers": [],
+            "as_of": "2026-05-01"
+          },
+          "correct": true,
+          "status": "acceptable",
+          "reason": "query wording is semantically equivalent"
+        }
+      ],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "faq_only_forbidden_market",
+      "query": "只解释为什么市价委托不一定按显示价格成交，不要查行情",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "search_business_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "为什么市价委托不一定按显示价格成交",
+              "category": "trading"
+            }
+          }
+        ],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "no_tool",
+        "tasks": []
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": false,
+      "argument_correct": false,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 0,
+      "argument_details": [
+        {
+          "tool_name": "search_business_knowledge",
+          "expected": {
+            "query": "为什么市价委托不一定按显示价格成交",
+            "category": "trading"
+          },
+          "actual": null,
+          "correct": false,
+          "status": "incorrect",
+          "reason": "missing matching Tool instance"
+        }
+      ],
+      "error_reasons": [
+        "tool selection differs from selected expected plan",
+        "one or more required values or non-default arguments differ"
+      ]
+    },
+    {
+      "case_id": "missing_symbol_abstain",
+      "query": "查询当前股价",
+      "expectation": "abstain",
+      "expected_plan": {
+        "expected_tools": [],
+        "expected_arguments": [],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "clarify",
+        "tasks": []
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 0,
+      "argument_details": [],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "conflicting_user_history_abstain",
+      "query": "查询他的组合分析",
+      "expectation": "abstain",
+      "expected_plan": {
+        "expected_tools": [],
+        "expected_arguments": [],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "1",
+            "tool_name": "get_portfolio_analytics",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": false,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 1,
+      "planned_task_count": 1,
+      "argument_details": [],
+      "error_reasons": [
+        "tool selection differs from selected expected plan",
+        "1 unnecessary Tool call(s)"
+      ]
+    },
+    {
+      "case_id": "underspecified_analysis_abstain",
+      "query": "帮我分析一下最近表现",
+      "expectation": "abstain",
+      "expected_plan": {
+        "expected_tools": [],
+        "expected_arguments": [],
+        "expected_dependencies": [],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "clarify",
+        "tasks": []
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": true,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 1.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 0,
+      "argument_details": [],
+      "error_reasons": [
+        "all scored dimensions correct"
+      ]
+    },
+    {
+      "case_id": "dynamic_context_dependency",
+      "query": "先查询 syn-user-0002 的客户资料，再给出融资交易风险提示；不要把上游结果写入参数",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_customer_context",
+          "search_business_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_customer_context",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            }
+          },
+          {
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "融资交易风险提示",
+              "category": "risk_notice"
+            }
+          }
+        ],
+        "expected_dependencies": [
+          {
+            "upstream_tool": "get_customer_context",
+            "downstream_tool": "search_business_knowledge"
+          }
+        ],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "t1",
+            "tool_name": "get_customer_context",
+            "arguments": {
+              "user_id": "syn-user-0002"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "t2",
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "融资交易风险提示",
+              "category": "risk_notice",
+              "as_of": null
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": true,
+      "temporal_correct": true,
+      "dependency_correct": false,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 0.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 2,
+      "argument_details": [
+        {
+          "tool_name": "get_customer_context",
+          "expected": {
+            "user_id": "syn-user-0002"
+          },
+          "actual": {
+            "user_id": "syn-user-0002"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "search_business_knowledge",
+          "expected": {
+            "query": "融资交易风险提示",
+            "category": "risk_notice"
+          },
+          "actual": {
+            "query": "融资交易风险提示",
+            "category": "risk_notice",
+            "as_of": null
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        }
+      ],
+      "error_reasons": [
+        "dependency edges differ"
+      ]
+    },
+    {
+      "case_id": "acceptable_dependency_variants",
+      "query": "查询 syn-user-0001 的客户资料和持仓后，再说明风险等级不匹配时能否购买产品",
+      "expectation": "executable",
+      "expected_plan": {
+        "expected_tools": [
+          "get_customer_context",
+          "get_portfolio_positions",
+          "search_business_knowledge"
+        ],
+        "expected_arguments": [
+          {
+            "tool_name": "get_customer_context",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            }
+          },
+          {
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            }
+          },
+          {
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "风险等级不匹配时能否购买产品",
+              "category": "risk_notice"
+            }
+          }
+        ],
+        "expected_dependencies": [
+          {
+            "upstream_tool": "get_customer_context",
+            "downstream_tool": "search_business_knowledge"
+          },
+          {
+            "upstream_tool": "get_portfolio_positions",
+            "downstream_tool": "search_business_knowledge"
+          }
+        ],
+        "temporal_expectation": []
+      },
+      "actual_plan": {
+        "decision": "execute",
+        "tasks": [
+          {
+            "task_id": "get_customer_context_1",
+            "tool_name": "get_customer_context",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "get_portfolio_positions_1",
+            "tool_name": "get_portfolio_positions",
+            "arguments": {
+              "user_id": "syn-user-0001"
+            },
+            "dependencies": []
+          },
+          {
+            "task_id": "search_business_knowledge_1",
+            "tool_name": "search_business_knowledge",
+            "arguments": {
+              "query": "风险等级不匹配时能否购买产品",
+              "category": "product_feature",
+              "as_of": null
+            },
+            "dependencies": []
+          }
+        ]
+      },
+      "validation_valid": true,
+      "validation_issues": [],
+      "tool_correct": true,
+      "argument_correct": false,
+      "temporal_correct": true,
+      "dependency_correct": false,
+      "temporal_correct_count": 0,
+      "temporal_total_count": 0,
+      "dependency_score": 0.0,
+      "unnecessary_calls": 0,
+      "planned_task_count": 3,
+      "argument_details": [
+        {
+          "tool_name": "get_customer_context",
+          "expected": {
+            "user_id": "syn-user-0001"
+          },
+          "actual": {
+            "user_id": "syn-user-0001"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "get_portfolio_positions",
+          "expected": {
+            "user_id": "syn-user-0001"
+          },
+          "actual": {
+            "user_id": "syn-user-0001"
+          },
+          "correct": true,
+          "status": "exact",
+          "reason": "schema-normalized arguments are equivalent"
+        },
+        {
+          "tool_name": "search_business_knowledge",
+          "expected": {
+            "query": "风险等级不匹配时能否购买产品",
+            "category": "risk_notice"
+          },
+          "actual": {
+            "query": "风险等级不匹配时能否购买产品",
+            "category": "product_feature",
+            "as_of": null
+          },
+          "correct": false,
+          "status": "incorrect",
+          "reason": "required value or non-default argument differs"
+        }
+      ],
+      "error_reasons": [
+        "one or more required values or non-default arguments differ",
+        "dependency edges differ"
+      ]
+    }
+  ]
+}

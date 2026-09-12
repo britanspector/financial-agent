@@ -17,6 +17,7 @@ class Task(Schema):
     tool_name: str = Field(min_length=1)
     arguments: dict[str, Any] = Field(default_factory=dict)
     dependencies: list[str] = Field(default_factory=list)
+    bindings: list["ResultBinding"] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def valid_dependencies(self):
@@ -25,6 +26,18 @@ class Task(Schema):
         if len(self.dependencies) != len(set(self.dependencies)):
             raise ValueError("Task dependencies must be unique")
         return self
+
+
+class ResultBinding(Schema):
+    """Copy one explicitly-addressed upstream result value into a Tool argument.
+
+    ``source_path`` is deliberately a list of field names/list indexes instead
+    of an expression language.  It is evaluated below ``ToolResult.data``.
+    """
+
+    target_parameter: str = Field(min_length=1)
+    source_task_id: str = Field(min_length=1)
+    source_path: list[str | int] = Field(min_length=1)
 
 
 class TaskExecutionResult(Schema):

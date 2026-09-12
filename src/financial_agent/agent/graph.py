@@ -22,6 +22,7 @@ from financial_agent.user_data.auth import CallContext
 
 
 class ToolInvoker(Protocol):
+    def input_model(self, name: str): ...
     def invoke(
         self,
         name: str,
@@ -81,11 +82,18 @@ def build_execution_graph(registry: ToolInvoker, *, context: CallContext | None 
             task_id for task_id, item in completed.items() if item.result.status != "error"
         }
         ready = [task for task in remaining if set(task.dependencies).issubset(successful_ids)]
+        resolved_ready: list[Task] = []
+        for task in ready:
+            resolved, error = _resolve_bound_task(task, completed, registry)
+            if error is not None:
+                generated.append(_control_error(task, code=error[0], message=error[1]))
+            else:
+                resolved_ready.append(resolved)
 
         if generated:
             update["tool_results"] = generated
-        if ready:
-            update["scheduled_tasks"] = ready
+        if resolved_ready:
+            update["scheduled_tasks"] = resolved_ready
             update["dispatch_action"] = "execute"
         elif generated:
             update["dispatch_action"] = "collect"
@@ -228,3 +236,38 @@ def _agent_error(item: TaskExecutionResult) -> AgentError | None:
         retryable=error.retryable,
         reason=reason,
     )
+
+
+def _resolve_bound_task(
+    task: Task,
+    completed: Mapping[str, TaskExecutionResult],
+    registry: ToolInvoker,
+) -> tuple[Task, tuple[str, str] | None]:
+    """Resolve simple structured refs only after all dependency results exist."""
+    if not task.bindings:
+        return task, None
+    arguments = dict(task.arguments)
+    for binding in task.bindings:
+        upstream = completed.get(binding.source_task_id)
+        if upstream is None or upstream.result.status == "error":
+            return task, ("BINDING_RESOLUTION_FAILED", "Binding source did not complete successfully")
+        value: Any = upstream.result.data
+        try:
+            for segment in binding.source_path:
+                if isinstance(segment, int):
+                    value = value[segment]
+                elif isinstance(value, Mapping):
+                    value = value[segment]
+                else:
+                    value = getattr(value, segment)
+        except (AttributeError, IndexError, KeyError, TypeError):
+            return task, ("BINDING_RESOLUTION_FAILED", "Binding source value was unavailable at runtime")
+        arguments[binding.target_parameter] = value
+    model = registry.input_model(task.tool_name)
+    if model is None:
+        return task, None  # preserve Phase 2 unknown-tool result behavior
+    try:
+        arguments = model.model_validate(arguments).model_dump(mode="json")
+    except Exception:
+        return task, ("INVALID_BOUND_ARGUMENTS", "Resolved binding values do not satisfy the Tool input schema")
+    return task.model_copy(update={"arguments": arguments}), None
