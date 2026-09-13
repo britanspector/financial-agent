@@ -82,7 +82,7 @@ def test_qwen_adapter_sends_low_temperature_json_schema_without_leaking_key():
 
     body = json.loads(captured["request"].content)
     assert result == {"decision": "no_tool", "tasks": []}
-    assert body["model"] == "qwen3.7-flash"
+    assert body["model"] == "qwen3.7-flash-2026-07-15"
     assert body["temperature"] == 0.1
     assert body["enable_thinking"] is False
     assert body["response_format"]["type"] == "json_schema"

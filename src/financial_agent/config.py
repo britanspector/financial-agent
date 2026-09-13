@@ -41,11 +41,15 @@ class Settings(BaseSettings):
     qwen_reranker_model: Literal["qwen3.7-text-rerank"] = "qwen3.7-text-rerank"
     qwen_reranker_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
     qwen_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
-    planner_model: str = Field(default="qwen3.7-flash", min_length=1)
+    planner_model: str = Field(default="qwen3.7-flash-2026-07-15", min_length=1)
     planner_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     planner_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     planner_temperature: float = Field(default=0.1, ge=0, le=2)
     planner_max_tasks: int = Field(default=12, ge=1, le=100)
+    verifier_model: str = Field(default="qwen3.7-flash", min_length=1)
+    verifier_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    verifier_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    verifier_temperature: float = Field(default=0.0, ge=0, le=2)
     execution_max_retry: int = Field(default=2, ge=0, le=100)
     execution_initial_backoff_seconds: float = Field(default=0.5, ge=0, le=300)
     execution_backoff_multiplier: float = Field(default=2.0, ge=1, le=100)

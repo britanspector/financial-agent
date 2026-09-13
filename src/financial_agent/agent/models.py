@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 from pydantic import Field, model_validator
 
 from financial_agent.schemas import Message, Schema, UserQuery
+from financial_agent.agent.result_path import ResultPathSegment
 from financial_agent.tools.contracts import ToolResult
 
 
@@ -37,7 +38,7 @@ class ResultBinding(Schema):
 
     target_parameter: str = Field(min_length=1)
     source_task_id: str = Field(min_length=1)
-    source_path: list[str | int] = Field(min_length=1)
+    source_path: list[ResultPathSegment] = Field(min_length=1)
 
 
 class TaskExecutionResult(Schema):

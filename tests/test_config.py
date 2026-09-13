@@ -45,9 +45,12 @@ def test_qwen_secret_and_model_defaults(monkeypatch):
     assert settings.qwen_embedding_model == "qwen3.7-text-embedding"
     assert settings.qwen_embedding_dimension == 1024
     assert settings.qwen_reranker_model == "qwen3.7-text-rerank"
-    assert settings.planner_model == "qwen3.7-flash"
+    assert settings.planner_model == "qwen3.7-flash-2026-07-15"
     assert settings.planner_temperature == 0.1
     assert settings.planner_max_tasks == 12
+    assert settings.verifier_model == "qwen3.7-flash"
+    assert settings.verifier_temperature == 0.0
+    assert settings.verifier_timeout_seconds == 30.0
     assert settings.execution_max_retry == 2
     assert settings.execution_initial_backoff_seconds == 0.5
     assert settings.execution_backoff_multiplier == 2.0
@@ -97,3 +100,18 @@ def test_retry_policy_is_built_from_execution_settings(monkeypatch):
         max_attempts=20,
         deadline_seconds=45,
     )
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("VERIFIER_MODEL", ""),
+        ("VERIFIER_TIMEOUT_SECONDS", "0"),
+        ("VERIFIER_TEMPERATURE", "-0.1"),
+        ("VERIFIER_TEMPERATURE", "2.1"),
+    ],
+)
+def test_invalid_verifier_settings_rejected(monkeypatch, key, value):
+    monkeypatch.setenv(f"FINANCIAL_AGENT_{key}", value)
+    with pytest.raises(ValidationError):
+        Settings()

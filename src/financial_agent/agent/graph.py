@@ -21,6 +21,7 @@ from financial_agent.agent.models import (
     TaskExecutionResult,
 )
 from financial_agent.agent.retry import ExecutionBudget, RetryPolicy
+from financial_agent.agent.result_path import ResultPathError, resolve_result_path
 from financial_agent.schemas import UserQuery
 from financial_agent.tools.contracts import ToolError, ToolResult
 from financial_agent.user_data.auth import CallContext
@@ -388,16 +389,9 @@ def _resolve_bound_task(
         upstream = completed.get(binding.source_task_id)
         if upstream is None or upstream.result.status == "error":
             return task, ("BINDING_RESOLUTION_FAILED", "Binding source did not complete successfully")
-        value: Any = upstream.result.data
         try:
-            for segment in binding.source_path:
-                if isinstance(segment, int):
-                    value = value[segment]
-                elif isinstance(value, Mapping):
-                    value = value[segment]
-                else:
-                    value = getattr(value, segment)
-        except (AttributeError, IndexError, KeyError, TypeError):
+            value = resolve_result_path(upstream.result.data, binding.source_path)
+        except ResultPathError:
             return task, ("BINDING_RESOLUTION_FAILED", "Binding source value was unavailable at runtime")
         arguments[binding.target_parameter] = value
     model = registry.input_model(task.tool_name)

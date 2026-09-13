@@ -10,6 +10,7 @@ from typing import Any, Union, get_args, get_origin
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from financial_agent.agent.models import Task
+from financial_agent.agent.result_path import result_path_type
 from financial_agent.planner.models import PlanValidationIssue, PlanValidationResult, StructuredPlan
 from financial_agent.planner.service import ToolCatalog
 
@@ -67,7 +68,7 @@ class PlanValidator:
                 if target is None:
                     issues.append(self._issue("INVALID_BINDING_FIELD", "Binding target is not a Tool parameter", task.task_id))
                     continue
-                source_type = _path_type(self._catalog.output_model(source.tool_name), binding.source_path)
+                source_type = result_path_type(self._catalog.output_model(source.tool_name), binding.source_path)
                 if source_type is None:
                     issues.append(self._issue("INVALID_BINDING_FIELD", "Binding source path is not a public result field", task.task_id))
                 elif not _types_compatible(source_type, target.annotation):
@@ -141,23 +142,6 @@ def _contains_legacy_result_reference(value: Any) -> bool:
     if isinstance(value, list):
         return any(_contains_legacy_result_reference(item) for item in value)
     return False
-
-
-def _path_type(model: type[BaseModel] | None, path: list[str | int]) -> Any | None:
-    current: Any = model
-    for part in path:
-        origin = get_origin(current)
-        if isinstance(current, type) and issubclass(current, BaseModel):
-            if not isinstance(part, str) or part not in current.model_fields:
-                return None
-            current = current.model_fields[part].annotation
-        elif origin is list:
-            if not isinstance(part, int) or part < 0:
-                return None
-            current = get_args(current)[0]
-        else:
-            return None
-    return current
 
 
 def _types_compatible(source: Any, target: Any) -> bool:
