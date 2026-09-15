@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel
 
 from financial_agent.agent.models import Task, TaskExecutionResult
+from financial_agent.context import ContextManager, ContextPolicy
 from financial_agent.planner.models import ReplanOutput, StructuredPlan
 from financial_agent.planner.prompt import build_planner_messages, build_replanner_messages
 from financial_agent.verifier.models import VerificationResult
@@ -22,14 +23,26 @@ class ToolCatalog(Protocol):
 
 
 class StructuredPlanner:
-    def __init__(self, provider: PlannerProvider, catalog: ToolCatalog) -> None:
+    def __init__(
+        self,
+        provider: PlannerProvider,
+        catalog: ToolCatalog,
+        *,
+        context_manager: ContextManager | None = None,
+        context_policy: ContextPolicy | None = None,
+    ) -> None:
         self._provider = provider
         self._catalog = catalog
+        self._context_manager = context_manager or ContextManager()
+        self._context_policy = context_policy or ContextPolicy()
 
     def plan(self, request: UserQuery) -> StructuredPlan:
+        contextual_request = self._context_manager.select(
+            request, "planner", self._context_policy,
+        ).request
         response_schema = _tool_aware_response_schema(self._catalog.describe())
         payload = self._provider.generate(
-            build_planner_messages(request, self._catalog.describe()),
+            build_planner_messages(contextual_request, self._catalog.describe()),
             response_schema=response_schema,
         )
         return StructuredPlan.model_validate(payload)
@@ -41,9 +54,12 @@ class StructuredPlanner:
         tool_results: list[TaskExecutionResult],
         feedback: VerificationResult,
     ) -> ReplanOutput:
+        contextual_request = self._context_manager.select(
+            request, "planner", self._context_policy,
+        ).request
         tools = self._catalog.describe()
         payload = self._provider.generate(
-            build_replanner_messages(request, tools, previous_plan, tool_results, feedback),
+            build_replanner_messages(contextual_request, tools, previous_plan, tool_results, feedback),
             response_schema=_replan_response_schema(tools),
         )
         output = ReplanOutput.model_validate(payload)

@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     answer_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     answer_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     answer_temperature: float = Field(default=0.1, ge=0, le=2)
+    context_strategy: Literal["full_history", "last_n", "budgeted_selection"] = "full_history"
+    context_last_n: int = Field(default=6, ge=0, le=100_000)
+    planner_context_budget_tokens: int = Field(default=4096, ge=0, le=1_000_000)
+    answer_context_budget_tokens: int = Field(default=4096, ge=0, le=1_000_000)
+    verifier_context_budget_tokens: int = Field(default=4096, ge=0, le=1_000_000)
     loop_max_rewrite: int = Field(default=2, ge=0, le=100)
     loop_max_replan: int = Field(default=2, ge=0, le=100)
     loop_max_iterations: int = Field(default=5, ge=1, le=1_000)

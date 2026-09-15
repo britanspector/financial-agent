@@ -2,7 +2,7 @@
 
 用于深度学习和求职展示的本地多工具 Agent 工程探索。全部用户数据为 synthetic，不连接真实公司内部系统。
 
-**当前阶段：Phase 4.3 Bounded Replan Loop 实现完成。** 现有 4 个用户数据 Tool、2 个行情 Tool 和 3 个 RAG Tool 的公开契约可供 Planner 选用；Qwen Planner 生成结构化 Task DAG，Validator 编译安全的结果绑定，执行图提供有界 Tool Retry，Answer Writer 生成证据引用，Verifier 的 PASS / REWRITE / REPLAN 判定会驱动下一步动作。
+**当前阶段：Phase 5.1 Context Budget + Selection 实现完成。** 现有 4 个用户数据 Tool、2 个行情 Tool 和 3 个 RAG Tool 的公开契约可供 Planner 选用；Qwen Planner、Answer Writer 和 Verifier 统一通过 Context Manager 获取受策略和预算控制的历史上下文，Phase 4.3 的有界 Rewrite/Replan 闭环保持不变。
 
 ## 项目结构与依赖
 
@@ -14,6 +14,7 @@ financial-agent/
 │   ├── schemas.py / logging_config.py
 │   ├── agent/                  # AgentState、Task、LangGraph execution graph
 │   ├── answering/              # 证据约束的 Answer Writer 与 Qwen adapter
+│   ├── context/                # Context policy、确定性 selection、token estimation
 │   ├── verifier/               # Structured Verifier、Qwen adapter 与 Eval metrics
 │   ├── demo_faults.py           # 仅测试/demo 使用的故障序列
 │   ├── tools/                  # ToolResult、ToolRegistry、CompositeToolRegistry
@@ -27,6 +28,7 @@ financial-agent/
 │   └── market_data/            # REST Provider、Tool 与 live test
 ├── eval/planner/                # 与 prompt/source 解耦的固定 Planner Eval JSONL
 ├── eval/loop/                   # 15 条离线闭环黑盒验收场景
+├── eval/context/                # 12 条长历史 Context Selection baseline
 └── data/
     └── knowledge/              # 72 份 synthetic Markdown 和 manifest.json
 ```
@@ -257,6 +259,53 @@ Answer Writer 由 `FINANCIAL_AGENT_ANSWER_MODEL`、`FINANCIAL_AGENT_ANSWER_BASE_
 
 2026-09-15 本机闭环验收结果为 15/15 通过；REWRITE audit 确认 Tool 调用数不变且传入 Writer 的 Result snapshot 未变化。
 
+## Context Manager
+
+Phase 5.1 新增 `financial_agent.context.ContextManager`。Planner、Answer Writer 和 Verifier 在构造原有 prompt 前均通过同一接口选择 `UserQuery.history`；`query` 和 `request_id` 原样保留，原请求不会被修改。默认 `full_history` 与 Phase 4 行为兼容，`last_n` 按“一个 user 消息及其后连续 assistant 消息”为一轮保留最近 N 轮，`budgeted_selection` 在各组件独立的 history token budget 内确定性选择完整轮次。历史开头的连续 assistant 消息组成独立首轮，`last_n=0` 可显式丢弃全部历史。
+
+`budgeted_selection` 优先尝试最新一轮；如果该轮本身超预算，会跳过并继续选择其他能装入预算的候选。其余候选综合 recency、与当前 query 的 lexical overlap、明确的 user ID / A 股证券代码 / 日期实体重叠，以及 user role 中的约束、纠正和确认语义排序。中文相关性使用固定 bigram，不把简单正则当作通用公司/机构 NER；公司和机构名称主要依赖 lexical overlap。assistant 的普通“收到/已确认”不会获得约束确认加权。选择以完整轮次为单位，不截断消息；只有 current query 无条件完整保留。
+
+默认 `HeuristicTokenEstimator` 对紧凑 message JSON 的 UTF-8 字节数做稳定估算，它不是具体模型 tokenizer。调用方可通过 `TokenEstimator.estimate_messages()` 协议注入其他估算实现。budget 和 `original_tokens` / `selected_tokens` 只统计 history，不包含 query、system prompt、tools、plan、Tool Results、draft 或 verifier feedback。
+
+```python
+from financial_agent.context import ContextManager, ContextPolicy
+
+selection = ContextManager().select(
+    request,
+    "planner",
+    ContextPolicy(strategy="budgeted_selection", budget_tokens=4096, last_n=6),
+)
+print(selection.request.history, selection.metrics)
+```
+
+`ContextSelection.metrics` 包含 component、strategy、budget、original/selected tokens、`selected_tokens / original_tokens` 压缩率和 selected/dropped message count。直接调用 `select()` 可读取结构化 metrics；Planner、Writer、Verifier 的正常路径只记录不含 query、history 或实体值的安全计数日志，不修改 `AgentLoopResult` / `LoopTrace`。
+
+配置项如下；strategy 和 `last_n` 默认共享，三组件 budget 独立：
+
+```text
+FINANCIAL_AGENT_CONTEXT_STRATEGY=full_history
+FINANCIAL_AGENT_CONTEXT_LAST_N=6
+FINANCIAL_AGENT_PLANNER_CONTEXT_BUDGET_TOKENS=4096
+FINANCIAL_AGENT_ANSWER_CONTEXT_BUDGET_TOKENS=4096
+FINANCIAL_AGENT_VERIFIER_CONTEXT_BUDGET_TOKENS=4096
+```
+
+固定 Context Selection Eval 位于 `eval/context/context_cases.jsonl`，包含 12 条至少 8 条 message 的长历史场景，覆盖早期 user ID、否定 Tool 约束、公司指代、日期/证券代码纠正、闲聊中的约束、超长无关最近轮次、显式执行顺序和 user/assistant 确认边界。运行：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_context.py
+```
+
+默认比较 `full_history`、最近 3 轮的 `last_n` 和 130-token `budgeted_selection`，记录关键上下文保留率、history token 压缩率、Planner plan-sufficiency 等价率、关键实体或用户约束丢失率。Planner 指标使用 `deterministic_required_context` 离线 probe：它判断所选上下文是否仍足以形成与 full-history 等价的计划输入，不调用或冒充真实 Qwen Planner。2026-09-16 的 Phase 5.1 baseline 为：
+
+| Strategy | 关键上下文保留率 | history token 压缩率 | Planner 等价率 | 关键实体/约束丢失率 |
+| --- | ---: | ---: | ---: | ---: |
+| full_history | 100.00% | 100.00% | 100.00% | 0.00% |
+| last_n | 43.48% | 61.70% | 33.33% | 55.56% |
+| budgeted_selection | 100.00% | 82.27% | 100.00% | 0.00% |
+
+这里的 token 压缩率沿用 `selected_tokens / original_tokens`，数值越低表示裁剪越多。Eval 只建立离线 baseline，不宣称 budgeted selection 必然优于 full history；后续可用同一组 case 对比 Summary、Summary + Retrieval，并另行运行真实 Planner 消融。
+
 `CompositeToolRegistry` / `merge_registries()` 仅按工具名路由到原有 User、Market、RAG Registry，不修改 Phase 1 `ToolRegistry` 的注册、校验、鉴权、审计或错误行为。完整运行时可通过 `build_agent_tools(settings)` 组合全部 9 个 Tool；对应的行情和 RAG Provider 仍要求环境变量凭证及已构建的 embedding index。
 
 ```python
@@ -279,7 +328,7 @@ print(state.final_output.model_dump_json())
 
 ## Structured Planner + Plan Validator
 
-Phase 3.1 在执行图之外新增 `financial_agent.planner`。`StructuredPlanner` 输入 `UserQuery.query`、未压缩的完整 `history`、9 个 Tool 的公开 description/input JSON Schema、当前日期和一小组 planning rules。输出固定为：
+Phase 3.1 在执行图之外新增 `financial_agent.planner`。`StructuredPlanner` 输入 `UserQuery.query`、经 Context Manager 选择的 `history`、9 个 Tool 的公开 description/input JSON Schema、当前日期和一小组 planning rules。输出固定为：
 
 ```json
 {
@@ -299,11 +348,11 @@ Phase 3.1 在执行图之外新增 `financial_agent.planner`。`StructuredPlanne
 }
 ```
 
-`decision` 为 `execute`、`clarify` 或 `no_tool`：execute 必须有 Task；clarify/no_tool 必须没有 Task。缺少 user_id、证券代码或其他业务必填参数时使用 clarify，通用问候/写作或系统无能力支持的请求使用 no_tool。Prompt 分为两条 message：system 包含最小充分计划、不得编造参数、并行/依赖、时间字段、能力边界和禁止结果引用等规则；user 是包含 query、完整 history、current_date 和 tools 的 JSON。Provider 发送 Tool-aware strict JSON Schema：每个 `tool_name` 分支的 `arguments` 直接使用该 Tool 的公开 input schema，杜绝开放对象生成非契约参数键。Tool 参数 schema 明示日期区间为 `[start_date, end_date)`，以及各 RAG `as_of` 的含上界语义。法规检索只用于法规/监管/适当性，业务知识只用于 FAQ/流程/产品说明；研报不是实时新闻；行情 Tool 仅支持已有的 A 股日终/历史行情，不支持指数实时、新闻、汇率或预测。Planner 仅依赖 `PlannerProvider` 协议。默认 adapter 通过 DashScope OpenAI-compatible `/chat/completions` 调用 `qwen3.7-flash-2026-07-15`，temperature 默认为 0.1，关闭 thinking，并优先使用 strict JSON Schema response format。API key 复用 `FINANCIAL_AGENT_QWEN_API_KEY`；model、base URL、timeout、temperature 和 task 上限分别由 `FINANCIAL_AGENT_PLANNER_*` 配置。
+`decision` 为 `execute`、`clarify` 或 `no_tool`：execute 必须有 Task；clarify/no_tool 必须没有 Task。缺少 user_id、证券代码或其他业务必填参数时使用 clarify，通用问候/写作或系统无能力支持的请求使用 no_tool。Prompt 分为两条 message：system 包含最小充分计划、不得编造参数、并行/依赖、时间字段、能力边界和禁止结果引用等规则；user 是包含 query、所选 history、current_date 和 tools 的 JSON。Provider 发送 Tool-aware strict JSON Schema：每个 `tool_name` 分支的 `arguments` 直接使用该 Tool 的公开 input schema，杜绝开放对象生成非契约参数键。Tool 参数 schema 明示日期区间为 `[start_date, end_date)`，以及各 RAG `as_of` 的含上界语义。法规检索只用于法规/监管/适当性，业务知识只用于 FAQ/流程/产品说明；研报不是实时新闻；行情 Tool 仅支持已有的 A 股日终/历史行情，不支持指数实时、新闻、汇率或预测。Planner 仅依赖 `PlannerProvider` 协议。默认 adapter 通过 DashScope OpenAI-compatible `/chat/completions` 调用 `qwen3.7-flash-2026-07-15`，temperature 默认为 0.1，关闭 thinking，并优先使用 strict JSON Schema response format。API key 复用 `FINANCIAL_AGENT_QWEN_API_KEY`；model、base URL、timeout、temperature 和 task 上限分别由 `FINANCIAL_AGENT_PLANNER_*` 配置。
 
 `PlanValidator` 不调用模型或 Tool，只保证计划合法可执行。Phase 3.2 的 `bindings` 使用结构化 `{target_parameter, source_task_id, source_path}`；`source_path` 固定从上游 `ToolResult.data` 开始，只允许该 Tool `output_model` 公开 Pydantic 契约中的字段名和非负 list index，不支持 JSONPath 或表达式。因此 Planner 不能读取 `ToolResult.status/error/request_id`，也不能遍历 service/provider 的内部字段。Validator 检查 source task、禁止自身/重复 target、字段白名单、静态类型兼容和包含 binding edge 的 cycle，并把 binding source 自动置为依赖（优先于手写 dependency）。校验成功时转换为现有 Phase 2 `Task`；clarify/no_tool 成功时返回空 Task。旧的 `$t1.result...` 字符串引用会被拒绝。
 
-执行前，Phase 2 dispatcher 在所有上游 dependency 成功后才解析 binding，将真实值写入 arguments，并重新以 Tool input schema 校验；解析失败会产生控制面错误，上游 Tool 失败则下游不会执行。统一入口为 `financial_agent.agent.orchestrator.run_planner_execution(request, planner, validator, registry)`，完整串通 `query/history → Planner → validate/binding compile → graph execution → FinalResult`。第一版只支持标量或完整 list 字段、任意长度的显式 DAG 链；Phase 4.1 已加入 Tool Execution Retry，Phase 4.2 提供独立语义 Verifier，但仍不含复杂表达式、自动 Rewrite/Replan 或 Context Manager。
+执行前，Phase 2 dispatcher 在所有上游 dependency 成功后才解析 binding，将真实值写入 arguments，并重新以 Tool input schema 校验；解析失败会产生控制面错误，上游 Tool 失败则下游不会执行。统一入口为 `financial_agent.agent.orchestrator.run_planner_execution(request, planner, validator, registry)`，完整串通 `query/history → Context Manager → Planner → validate/binding compile → graph execution → FinalResult`。第一版只支持标量或完整 list 字段、任意长度的显式 DAG 链；Phase 4.1 已加入 Tool Execution Retry，Phase 4.2 提供独立语义 Verifier，Phase 4.3 加入自动 Rewrite/Replan，Phase 5.1 加入确定性 history budget 和 selection。
 
 固定 Planner Eval Set 位于 `eval/planner/planner_cases.jsonl`，共 40 条独立 JSONL case，不从 prompt、模型输出或源码反推期望。每条都包含 query、完整 history、expected_tools、expected_arguments、expected_dependencies、temporal_expectation、forbidden_tools；可用 `acceptable_plans` 声明多套等价 Tool/参数/依赖 pattern。case 不保存或匹配模型生成的 task ID，依赖只按上游/下游 Tool edge 比较。4 条信息不足或歧义 case 标记为 `abstain`，要求不调用 Tool、不编造参数；它们不进入 executable valid plan rate 的分母。
 
@@ -445,11 +494,12 @@ registry = register_user_tools(UserDataService(
 - 结构化 Result Binding、公开输出字段白名单、运行期结果路径解析和 plan → validate → execute 统一入口。
 - Provider 解耦的 Structured Verifier、严格 PASS/REWRITE/REPLAN schema、确定性 failed_task_ids 和固定 Verifier Eval Set。
 - Verifier 驱动的有界 Agent Loop、证据约束 Answer Writer、完整 Replan、依赖安全结果复用、显式 force rerun 和跨轮 Tool attempt 总预算。
+- Planner、Writer、Verifier 共用的 Context Manager、三种 history 策略、独立 token budget、安全选择指标和可注入 token estimator。
 - Prompt-independent 的 40 条 Planner Eval Set：单/并行/依赖、三源组合、当前/历史时间、RAG filters、法规、FAQ、无关 Tool 与 abstain 边界，以及六项离线/真实模型通用指标。
 
 ## 已知限制
 
-- 闭环已执行 Rewrite/Replan，但没有 Context Manager、跨进程 checkpoint、人工审批点或 Agentic RL。
+- 闭环已执行 Rewrite/Replan 并支持确定性 history selection，但没有跨进程 checkpoint、人工审批点或 Agentic RL。
 - Result Binding 只支持公开结果中的字段名和非负 list index，不支持 JSONPath、表达式或复杂变换。
 - clarify/no_tool 只表达 Planner 决策；本阶段仍未生成面向用户的澄清或 no-tool 文案。
 - Eval Set 对 Tool/参数/依赖边做固定语义匹配，但尚未覆盖同义 query rewrite、重复同名 Tool 实例的边身份、统计置信区间、成本和延迟。
@@ -458,11 +508,11 @@ registry = register_user_tools(UserDataService(
 - Knowledge retrieval 尚未实现复杂表格解析、精细版本推理、query rewrite、decomposition、HyDE、GraphRAG 或向量数据库。
 - Market Data v0.1 已提供同步 Tushare REST Provider；120 积分下尚无指数、复权、实时行情、分钟线、Level-2、新闻、资金流或指标库。
 - 当前为同步本地访问；审计没有多进程并发保证、轮转或防篡改能力。日志不是通用敏感数据脱敏器。
-- 未定义计划结构或 token budget，模型 key 仅预留；不支持多币种、会计对账和数据库迁移。
+- Context budget 只覆盖 history，尚不覆盖 query、tools、plan、Tool Results、draft 或 feedback；不支持 Summary、history retrieval/embedding、长期 Memory、模型精确 tokenizer 或 KV Cache 优化。
 - 依赖只有兼容范围，未锁定全部传递依赖；只在当前 Windows 环境验证。
 
 ## 下一步
 
-下一阶段可增加 Context Manager、prompt/token/cost 预算、循环 trace 持久化、真实 Provider 闭环 Eval，并补充面向用户的 clarify/no_tool 文案。
+下一阶段可增加 Summary Compression、完整 prompt/token/cost 预算、循环 trace 持久化、真实 Provider 闭环 Eval，并补充面向用户的 clarify/no_tool 文案。
 
 后续工程约束：外部模型和数据源必须经 adapter/registry，LangGraph node 不直接依赖 provider SDK；API key 仅由环境配置注入；所有用户数据为 synthetic；每个功能补测试，并同步更新 README 的“当前能力 / 已知限制 / 下一步”。

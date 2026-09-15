@@ -54,6 +54,11 @@ def test_qwen_secret_and_model_defaults(monkeypatch):
     assert settings.verifier_timeout_seconds == 30.0
     assert settings.answer_model == "qwen3.7-flash"
     assert settings.answer_temperature == 0.1
+    assert settings.context_strategy == "full_history"
+    assert settings.context_last_n == 6
+    assert settings.planner_context_budget_tokens == 4096
+    assert settings.answer_context_budget_tokens == 4096
+    assert settings.verifier_context_budget_tokens == 4096
     assert settings.loop_max_rewrite == 2
     assert settings.loop_max_replan == 2
     assert settings.loop_max_iterations == 5
@@ -125,6 +130,19 @@ def test_loop_policy_is_built_from_settings(monkeypatch):
     ("ANSWER_TIMEOUT_SECONDS", "0"), ("ANSWER_TEMPERATURE", "3"),
 ])
 def test_invalid_agent_loop_settings_rejected(monkeypatch, key, value):
+    monkeypatch.setenv(f"FINANCIAL_AGENT_{key}", value)
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+@pytest.mark.parametrize(("key", "value"), [
+    ("CONTEXT_STRATEGY", "unknown"),
+    ("CONTEXT_LAST_N", "-1"),
+    ("PLANNER_CONTEXT_BUDGET_TOKENS", "-1"),
+    ("ANSWER_CONTEXT_BUDGET_TOKENS", "-1"),
+    ("VERIFIER_CONTEXT_BUDGET_TOKENS", "-1"),
+])
+def test_invalid_context_settings_rejected(monkeypatch, key, value):
     monkeypatch.setenv(f"FINANCIAL_AGENT_{key}", value)
     with pytest.raises(ValidationError):
         Settings()

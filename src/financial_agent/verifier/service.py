@@ -7,6 +7,7 @@ from typing import Protocol, Sequence
 from pydantic import BaseModel, ValidationError
 
 from financial_agent.agent.models import Task, TaskExecutionResult
+from financial_agent.context import ContextManager, ContextPolicy
 from financial_agent.verifier.evidence import InvalidEvidenceInputError, resolve_evidence, validate_execution
 from financial_agent.schemas import UserQuery
 from financial_agent.verifier.models import DraftAnswer, VerificationResult, VerifierModelOutput
@@ -23,9 +24,18 @@ class InvalidVerificationInputError(ValueError):
 
 
 class StructuredVerifier:
-    def __init__(self, provider: VerifierProvider, catalog: OutputCatalog) -> None:
+    def __init__(
+        self,
+        provider: VerifierProvider,
+        catalog: OutputCatalog,
+        *,
+        context_manager: ContextManager | None = None,
+        context_policy: ContextPolicy | None = None,
+    ) -> None:
         self._provider = provider
         self._catalog = catalog
+        self._context_manager = context_manager or ContextManager()
+        self._context_policy = context_policy or ContextPolicy()
 
     def verify(
         self,
@@ -43,9 +53,12 @@ class StructuredVerifier:
             raise InvalidVerificationInputError(str(exc)) from exc
         ordered_results = [result_by_id[task.task_id] for task in tasks]
         failed_task_ids = [task.task_id for task in tasks if result_by_id[task.task_id].result.status == "error"]
+        contextual_request = self._context_manager.select(
+            request, "verifier", self._context_policy,
+        ).request
         raw = self._provider.generate(
             build_verifier_messages(
-                request,
+                contextual_request,
                 tasks,
                 ordered_results,
                 draft,
