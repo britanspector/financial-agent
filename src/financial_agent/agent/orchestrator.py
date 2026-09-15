@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from time import monotonic, sleep
+
 from financial_agent.agent.graph import ToolInvoker, run_execution_graph
 from financial_agent.agent.models import FinalResult
+from financial_agent.agent.retry import RetryPolicy
 from financial_agent.planner.service import StructuredPlanner
 from financial_agent.planner.validator import PlanValidator
 from financial_agent.schemas import UserQuery
@@ -22,6 +26,9 @@ def run_planner_execution(
     *,
     context: CallContext | None = None,
     max_concurrency: int | None = None,
+    retry_policy: RetryPolicy | None = None,
+    clock: Callable[[], float] = monotonic,
+    sleeper: Callable[[float], None] = sleep,
 ) -> FinalResult:
     """Run the complete query/history → Planner → Validator → graph pipeline."""
     validation = validator.validate(planner.plan(request))
@@ -31,7 +38,14 @@ def run_planner_execution(
     if validation.decision != "execute":
         return FinalResult(status="success", query=request.query, task_results=[], errors=[], iteration_count=0)
     state = run_execution_graph(
-        request, validation.tasks, registry, context=context, max_concurrency=max_concurrency,
+        request,
+        validation.tasks,
+        registry,
+        context=context,
+        max_concurrency=max_concurrency,
+        retry_policy=retry_policy,
+        clock=clock,
+        sleeper=sleeper,
     )
     assert state.final_output is not None
     return state.final_output

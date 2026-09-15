@@ -3,12 +3,15 @@
 from financial_agent.agent.graph import build_execution_graph, run_execution_graph
 from financial_agent.agent.models import AgentError, AgentState, FinalResult, ResultBinding, Task, TaskExecutionResult
 from financial_agent.agent.runtime import build_agent_tools
+from financial_agent.agent.retry import RetryPolicy, ToolAttemptBudget
 
 __all__ = [
     "AgentError",
     "AgentState",
     "FinalResult",
     "ResultBinding",
+    "RetryPolicy",
+    "ToolAttemptBudget",
     "Task",
     "TaskExecutionResult",
     "build_agent_tools",

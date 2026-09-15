@@ -7,12 +7,15 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
+from financial_agent.agent.models import Task, TaskExecutionResult
 from financial_agent.planner.models import PlannedTask, StructuredPlan
 from financial_agent.planner.prompt import build_planner_messages
 from financial_agent.planner.qwen_provider import QwenPlannerProvider
 from financial_agent.planner.service import StructuredPlanner
 from financial_agent.planner.validator import PlanValidator
 from financial_agent.schemas import Message, UserQuery
+from financial_agent.tools.contracts import ToolResult
+from financial_agent.verifier.models import VerificationResult
 
 from .conftest import planner_catalog
 
@@ -63,6 +66,43 @@ def test_fake_provider_produces_strict_structured_plan():
     assert len(provider.calls[0][1]["oneOf"]) == 3
 
 
+def test_replan_returns_full_replacement_and_explicit_force_rerun_schema():
+    provider = FakePlannerProvider({
+        "tasks": [{"task_id": "t1", "tool_name": "get_portfolio_positions",
+                   "arguments": {"user_id": "syn-user-0001"}, "dependencies": [], "bindings": []}],
+        "force_rerun_task_ids": ["t1"],
+    })
+    planner = StructuredPlanner(provider, planner_catalog())
+    previous = [Task(task_id="t1", tool_name="get_portfolio_positions",
+                     arguments={"user_id": "syn-user-0001"}, dependencies=[])]
+    result = TaskExecutionResult(task_id="t1", tool_name="get_portfolio_positions",
+        result=ToolResult(status="error", data=None, source="test", latency=0,
+                          error={"code": "FAIL", "message": "fail", "http_status": 503, "retryable": False},
+                          request_id="00000000-0000-0000-0000-000000000001"))
+    output = planner.replan(UserQuery(query="retry"), previous, [result],
+                            VerificationResult(decision="REPLAN", reason="missing",
+                                               missing_evidence=["positions"], failed_task_ids=["t1"]))
+    assert output.force_rerun_task_ids == ["t1"]
+    schema = provider.calls[0][1]
+    assert schema["required"] == ["tasks", "force_rerun_task_ids"]
+    payload = json.loads(provider.calls[0][0][1]["content"])
+    assert payload["previous_plan"][0]["task_id"] == "t1"
+    assert "request_id" not in provider.calls[0][0][1]["content"]
+
+
+def test_replan_rejects_unknown_force_rerun_id():
+    provider = FakePlannerProvider({
+        "tasks": [{"task_id": "t1", "tool_name": "get_portfolio_positions",
+                   "arguments": {"user_id": "syn-user-0001"}, "dependencies": [], "bindings": []}],
+        "force_rerun_task_ids": ["invented"],
+    })
+    with pytest.raises(ValueError, match="force_rerun_task_ids"):
+        StructuredPlanner(provider, planner_catalog()).replan(
+            UserQuery(query="retry"), [], [],
+            VerificationResult(decision="REPLAN", reason="missing", missing_evidence=["positions"]),
+        )
+
+
 def test_structured_plan_rejects_extra_fields():
     with pytest.raises(ValidationError):
         StructuredPlan.model_validate({"decision": "no_tool", "tasks": [], "answer": "not allowed"})
@@ -82,7 +122,7 @@ def test_qwen_adapter_sends_low_temperature_json_schema_without_leaking_key():
 
     body = json.loads(captured["request"].content)
     assert result == {"decision": "no_tool", "tasks": []}
-    assert body["model"] == "qwen3.7-flash"
+    assert body["model"] == "qwen3.7-flash-2026-07-15"
     assert body["temperature"] == 0.1
     assert body["enable_thinking"] is False
     assert body["response_format"]["type"] == "json_schema"

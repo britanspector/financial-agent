@@ -41,11 +41,28 @@ class Settings(BaseSettings):
     qwen_reranker_model: Literal["qwen3.7-text-rerank"] = "qwen3.7-text-rerank"
     qwen_reranker_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
     qwen_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
-    planner_model: str = Field(default="qwen3.7-flash", min_length=1)
+    planner_model: str = Field(default="qwen3.7-flash-2026-07-15", min_length=1)
     planner_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     planner_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     planner_temperature: float = Field(default=0.1, ge=0, le=2)
     planner_max_tasks: int = Field(default=12, ge=1, le=100)
+    verifier_model: str = Field(default="qwen3.7-flash", min_length=1)
+    verifier_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    verifier_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    verifier_temperature: float = Field(default=0.0, ge=0, le=2)
+    answer_model: str = Field(default="qwen3.7-flash", min_length=1)
+    answer_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    answer_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    answer_temperature: float = Field(default=0.1, ge=0, le=2)
+    loop_max_rewrite: int = Field(default=2, ge=0, le=100)
+    loop_max_replan: int = Field(default=2, ge=0, le=100)
+    loop_max_iterations: int = Field(default=5, ge=1, le=1_000)
+    loop_total_tool_budget: int = Field(default=36, ge=1, le=10_000)
+    execution_max_retry: int = Field(default=2, ge=0, le=100)
+    execution_initial_backoff_seconds: float = Field(default=0.5, ge=0, le=300)
+    execution_backoff_multiplier: float = Field(default=2.0, ge=1, le=100)
+    execution_max_attempts: int = Field(default=36, ge=1, le=10_000)
+    execution_deadline_seconds: float = Field(default=120.0, gt=0, le=86_400)
     qwen_embedding_batch_size: int = Field(default=20, ge=1, le=20)
     qwen_embedding_query_instruct: str = "Retrieve relevant passages from a financial knowledge base."
     qwen_reranker_instruct: str = "Given a financial search query, retrieve passages that answer the query."

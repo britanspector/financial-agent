@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from collections import deque
 from threading import Barrier, Lock
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from financial_agent.agent.graph import run_execution_graph
-from financial_agent.agent.models import Task
+from financial_agent.agent.graph import build_execution_graph, run_execution_graph
+from financial_agent.agent.models import AgentState, Task, TaskExecutionResult
+from financial_agent.agent.retry import RetryPolicy
 from financial_agent.knowledge.runtime import register_rag_tools
 from financial_agent.market_data.runtime import register_market_tools
 from financial_agent.schemas import Schema, UserQuery
@@ -70,6 +72,61 @@ class RecordingService:
             latency=0,
             error=ToolError(code=code, message=code, http_status=503 if retryable else 422, retryable=retryable),
             request_id=request_id or uuid4(),
+        )
+
+
+class ManualClock:
+    def __init__(self, value=0.0):
+        self.value = value
+        self.sleeps: list[float] = []
+
+    def __call__(self):
+        return self.value
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.value += seconds
+
+
+class SequenceService(RecordingService):
+    def __init__(self, outcomes, *, clock=None, advance_per_call=0.0):
+        super().__init__()
+        self.outcomes = deque(outcomes)
+        self.request_ids = []
+        self.arguments = []
+        self.clock = clock
+        self.advance_per_call = advance_per_call
+
+    def execute(self, spec, arguments, *, context, request_id=None):
+        del context
+        self.calls.append(spec.name)
+        self.request_ids.append(request_id)
+        self.arguments.append(arguments)
+        if self.clock is not None:
+            self.clock.value += self.advance_per_call
+        outcome = self.outcomes.popleft()
+        if outcome == "success":
+            return ToolResult(
+                status="success",
+                data={"value": arguments["value"]},
+                source="test",
+                latency=0,
+                error=None,
+                request_id=request_id,
+            )
+        code, http_status, retryable = outcome
+        return ToolResult(
+            status="error",
+            data=None,
+            source="test",
+            latency=0,
+            error=ToolError(
+                code=code,
+                message=f"{code}-{len(self.calls)}",
+                http_status=http_status,
+                retryable=retryable,
+            ),
+            request_id=request_id,
         )
 
 
@@ -145,15 +202,184 @@ def test_tool_failure_enters_pool_and_blocks_dependents():
     registry, service = registry_with("fail", "ok")
     tasks = [task("root", "fail"), task("child", "ok", dependencies=["root"])]
 
-    state = run_execution_graph(UserQuery(query="failure"), tasks, registry)
+    state = run_execution_graph(
+        UserQuery(query="failure"), tasks, registry, sleeper=lambda _: None,
+    )
 
-    assert service.calls == ["fail"]
+    assert service.calls == ["fail", "fail", "fail"]
     assert [item.result.error.code for item in state.tool_results] == [
         "TEMPORARY_FAILURE", "DEPENDENCY_FAILED",
     ]
     assert state.tool_results[0].result.error.retryable is True
+    assert state.tool_results[0].retry_count == 2
     assert [error.reason for error in state.errors] == [None, "dependency_failed"]
     assert state.final_output.status == "failed"
+
+
+def test_retryable_failures_use_exponential_backoff_then_succeed():
+    clock = ManualClock()
+    service = SequenceService([
+        ("TIMEOUT", 504, True),
+        ("RATE_LIMITED", 429, True),
+        "success",
+    ])
+    registry, _ = registry_with("ok", service=service)
+
+    state = run_execution_graph(
+        UserQuery(query="retry"), [task("one")], registry,
+        clock=clock, sleeper=clock.sleep,
+    )
+
+    item = state.final_output.task_results[0]
+    assert item.result.status == "success"
+    assert item.retry_count == 2
+    assert item.max_retry == 2
+    assert clock.sleeps == [0.5, 1.0]
+    assert len(set(service.request_ids)) == 3
+    assert state.final_output.attempt_count == 3
+    assert state.final_output.iteration_count == 2
+
+
+def test_retry_exhaustion_preserves_last_real_tool_error():
+    service = SequenceService([
+        ("TIMEOUT", 504, True),
+        ("RATE_LIMITED", 429, True),
+        ("TEMPORARY_FAILURE", 503, True),
+    ])
+    registry, _ = registry_with("ok", service=service)
+
+    state = run_execution_graph(
+        UserQuery(query="retry failure"), [task("one")], registry,
+        sleeper=lambda _: None,
+    )
+
+    item = state.final_output.task_results[0]
+    assert item.retry_count == 2
+    assert item.result.error.code == "TEMPORARY_FAILURE"
+    assert item.result.error.message == "TEMPORARY_FAILURE-3"
+    assert state.final_output.attempt_count == 3
+
+
+@pytest.mark.parametrize(
+    ("code", "status"),
+    [("UNAUTHORIZED", 401), ("FORBIDDEN", 403), ("INVALID_ARGUMENT", 422)],
+)
+def test_non_retryable_errors_are_attempted_once(code, status):
+    clock = ManualClock()
+    service = SequenceService([(code, status, False)])
+    registry, _ = registry_with("ok", service=service)
+
+    state = run_execution_graph(
+        UserQuery(query="no retry"), [task("one")], registry,
+        clock=clock, sleeper=clock.sleep,
+    )
+
+    assert service.calls == ["ok"]
+    assert clock.sleeps == []
+    assert state.final_output.task_results[0].retry_count == 0
+
+
+def test_deadline_prevents_retry_but_preserves_real_error():
+    clock = ManualClock()
+    service = SequenceService(
+        [("TIMEOUT", 504, True)], clock=clock, advance_per_call=120,
+    )
+    registry, _ = registry_with("ok", service=service)
+
+    state = run_execution_graph(
+        UserQuery(query="soft deadline"), [task("one")], registry,
+        clock=clock, sleeper=clock.sleep,
+    )
+
+    item = state.final_output.task_results[0]
+    assert item.result.error.code == "TIMEOUT"
+    assert item.retry_count == 0
+    assert state.final_output.attempt_count == 1
+    assert state.final_output.deadline_exceeded is True
+    assert state.final_output.execution_duration_ms >= 120_000
+
+
+def test_deadline_before_first_attempt_returns_control_error():
+    class StartExpiredClock:
+        def __init__(self):
+            self.calls = 0
+
+        def __call__(self):
+            self.calls += 1
+            return 0.0 if self.calls == 1 else 120.0
+
+    clock = StartExpiredClock()
+    registry, service = registry_with("ok")
+
+    state = run_execution_graph(
+        UserQuery(query="expired"), [task("one")], registry,
+        clock=clock, sleeper=lambda _: None,
+    )
+
+    assert service.calls == []
+    assert state.final_output.task_results[0].result.error.code == "EXECUTION_BUDGET_EXCEEDED"
+    assert state.final_output.attempt_count == 0
+    assert state.final_output.deadline_exceeded is True
+
+
+def test_global_attempt_budget_is_atomic_across_parallel_tasks():
+    service = SequenceService(["success", "success"])
+    registry, _ = registry_with("ok", service=service)
+    policy = RetryPolicy(max_attempts=2)
+
+    state = run_execution_graph(
+        UserQuery(query="global budget"),
+        [task("one"), task("two"), task("three")],
+        registry,
+        retry_policy=policy,
+        max_concurrency=3,
+    )
+
+    assert len(service.calls) == 2
+    assert state.final_output.attempt_count == 2
+    assert state.final_output.attempt_budget_exhausted is True
+    assert sum(
+        item.result.error is not None
+        and item.result.error.code == "EXECUTION_BUDGET_EXCEEDED"
+        for item in state.final_output.task_results
+    ) == 1
+
+
+def test_zero_retry_policy_never_retries_retryable_error():
+    service = SequenceService([("TIMEOUT", 504, True)])
+    registry, _ = registry_with("ok", service=service)
+
+    state = run_execution_graph(
+        UserQuery(query="zero retry"), [task("one")], registry,
+        retry_policy=RetryPolicy(max_retry=0),
+    )
+
+    assert service.calls == ["ok"]
+    assert state.final_output.task_results[0].retry_count == 0
+
+
+def test_compiled_graph_reuse_isolates_run_budgets():
+    service = SequenceService(["success", "success"])
+    registry, _ = registry_with("ok", service=service)
+    graph = build_execution_graph(registry, retry_policy=RetryPolicy(max_attempts=1))
+
+    first = graph.invoke(AgentState.from_query(UserQuery(query="first"), [task("one")]))
+    second = graph.invoke(AgentState.from_query(UserQuery(query="second"), [task("two")]))
+
+    assert first["final_output"].attempt_count == 1
+    assert second["final_output"].attempt_count == 1
+    assert service.calls == ["ok", "ok"]
+
+
+def test_task_result_rejects_retry_count_above_configured_limit():
+    result = ToolResult(
+        status="success", data={"value": 1}, source="test", latency=0,
+        error=None, request_id=uuid4(),
+    )
+    with pytest.raises(ValidationError, match="retry_count cannot exceed max_retry"):
+        TaskExecutionResult(
+            task_id="one", tool_name="ok", result=result, retry_count=2, max_retry=1,
+        )
 
 
 def test_unknown_tool_and_invalid_arguments_are_results_not_exceptions():

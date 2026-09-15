@@ -26,6 +26,13 @@ class StructuredPlan(Schema):
     tasks: list[PlannedTask]
 
 
+class ReplanOutput(Schema):
+    """Full replacement plan plus explicit cache bypass requests."""
+
+    tasks: list[PlannedTask] = Field(min_length=1)
+    force_rerun_task_ids: list[str] = Field(default_factory=list)
+
+
 class PlanValidationIssue(Schema):
     code: Literal[
         "EMPTY_PLAN",

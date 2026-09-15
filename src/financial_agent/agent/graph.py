@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Protocol
+from dataclasses import dataclass
+from threading import Lock
+from time import monotonic, sleep
+from typing import Any, Callable, Protocol
 from uuid import UUID, uuid4
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.runtime import Runtime
 from langgraph.types import Send
 
 from financial_agent.agent.models import (
@@ -16,6 +20,8 @@ from financial_agent.agent.models import (
     Task,
     TaskExecutionResult,
 )
+from financial_agent.agent.retry import ExecutionBudget, RetryPolicy, ToolAttemptBudget
+from financial_agent.agent.result_path import ResultPathError, resolve_result_path
 from financial_agent.schemas import UserQuery
 from financial_agent.tools.contracts import ToolError, ToolResult
 from financial_agent.user_data.auth import CallContext
@@ -33,12 +39,54 @@ class ToolInvoker(Protocol):
     ) -> ToolResult: ...
 
 
-def build_execution_graph(registry: ToolInvoker, *, context: CallContext | None = None):
+@dataclass(frozen=True)
+class ExecutionRuntime:
+    """Dependencies and mutable budget isolated to one graph invocation."""
+
+    call_context: CallContext
+    retry_policy: RetryPolicy
+    budget: ExecutionBudget
+    sleeper: Callable[[float], None]
+
+
+def build_execution_graph(
+    registry: ToolInvoker,
+    *,
+    context: CallContext | None = None,
+    retry_policy: RetryPolicy | None = None,
+    clock: Callable[[], float] = monotonic,
+    sleeper: Callable[[float], None] = sleep,
+):
     """Compile a graph whose plan is supplied as structured tasks."""
     call_context = context or CallContext()
+    policy = retry_policy or RetryPolicy()
+    fallback_runtimes: dict[UUID, ExecutionRuntime] = {}
+    fallback_lock = Lock()
 
-    def dispatcher(raw_state: AgentState | Mapping[str, Any]) -> dict[str, Any]:
+    def execution_runtime(
+        request_id: UUID,
+        runtime: Runtime[ExecutionRuntime],
+    ) -> ExecutionRuntime:
+        if runtime.context is not None:
+            return runtime.context
+        # Preserve direct use of the compiled graph while keeping its budget
+        # isolated by request ID. run_execution_graph always supplies context.
+        with fallback_lock:
+            if request_id not in fallback_runtimes:
+                fallback_runtimes[request_id] = ExecutionRuntime(
+                    call_context=call_context,
+                    retry_policy=policy,
+                    budget=ExecutionBudget(policy, clock=clock),
+                    sleeper=sleeper,
+                )
+            return fallback_runtimes[request_id]
+
+    def dispatcher(
+        raw_state: AgentState | Mapping[str, Any],
+        runtime: Runtime[ExecutionRuntime],
+    ) -> dict[str, Any]:
         state = _state(raw_state)
+        run = execution_runtime(state.request_id, runtime)
         completed = {item.task_id: item for item in state.tool_results}
         pending = [task for task in state.tasks if task.task_id not in completed]
         update: dict[str, Any] = {
@@ -61,6 +109,7 @@ def build_execution_graph(registry: ToolInvoker, *, context: CallContext | None 
                 task,
                 code="DEPENDENCY_FAILED",
                 message="Task blocked because a dependency failed",
+                max_retry=run.retry_policy.max_retry,
             ))
 
         blocked_ids = {item.task_id for item in generated}
@@ -74,6 +123,7 @@ def build_execution_graph(registry: ToolInvoker, *, context: CallContext | None 
                 task,
                 code="UNRESOLVED_DEPENDENCY",
                 message=f"missing_dependency: {', '.join(absent)}",
+                max_retry=run.retry_policy.max_retry,
             ))
 
         generated_ids = {item.task_id for item in generated}
@@ -86,7 +136,12 @@ def build_execution_graph(registry: ToolInvoker, *, context: CallContext | None 
         for task in ready:
             resolved, error = _resolve_bound_task(task, completed, registry)
             if error is not None:
-                generated.append(_control_error(task, code=error[0], message=error[1]))
+                generated.append(_control_error(
+                    task,
+                    code=error[0],
+                    message=error[1],
+                    max_retry=run.retry_policy.max_retry,
+                ))
             else:
                 resolved_ready.append(resolved)
 
@@ -103,6 +158,7 @@ def build_execution_graph(registry: ToolInvoker, *, context: CallContext | None 
                     task,
                     code="UNRESOLVED_DEPENDENCY",
                     message="cycle_or_deadlock: no dependency-ready task remains",
+                    max_retry=run.retry_policy.max_retry,
                 )
                 for task in remaining
             ]
@@ -114,19 +170,68 @@ def build_execution_graph(registry: ToolInvoker, *, context: CallContext | None 
     def route_dispatch(raw_state: AgentState | Mapping[str, Any]):
         state = _state(raw_state)
         if state.dispatch_action == "execute":
-            return [Send("execute_tool", {"task": task}) for task in state.scheduled_tasks]
+            return [
+                Send("execute_tool", {"task": task, "request_id": state.request_id})
+                for task in state.scheduled_tasks
+            ]
         if state.dispatch_action == "collect":
             return "collect_results"
         return "finalize"
 
-    def execute_tool(payload: Mapping[str, Any]) -> dict[str, list[TaskExecutionResult]]:
+    def execute_tool(
+        payload: Mapping[str, Any],
+        runtime: Runtime[ExecutionRuntime],
+    ) -> dict[str, list[TaskExecutionResult]]:
         task = Task.model_validate(payload["task"])
-        result = registry.invoke(task.tool_name, task.arguments, context=call_context)
+        run = execution_runtime(UUID(str(payload["request_id"])), runtime)
+        attempt_count = 0
+        result: ToolResult | None = None
+        while True:
+            if not run.budget.reserve_attempt():
+                if result is None:
+                    task_result = _control_error(
+                        task,
+                        code="EXECUTION_BUDGET_EXCEEDED",
+                        message="Execution budget prevented the Tool attempt from starting",
+                        max_retry=run.retry_policy.max_retry,
+                    )
+                else:
+                    task_result = TaskExecutionResult(
+                        task_id=task.task_id,
+                        tool_name=task.tool_name,
+                        result=result,
+                        retry_count=max(0, attempt_count - 1),
+                        max_retry=run.retry_policy.max_retry,
+                    )
+                return {"tool_results": [task_result]}
+
+            result = registry.invoke(
+                task.tool_name,
+                task.arguments,
+                context=run.call_context,
+                request_id=uuid4(),
+            )
+            attempt_count += 1
+            if (
+                result.status != "error"
+                or result.error is None
+                or not result.error.retryable
+                or attempt_count >= run.retry_policy.max_retry + 1
+            ):
+                break
+
+            delay = run.retry_policy.backoff_seconds(attempt_count - 1)
+            if not run.budget.allows_retry_after(delay):
+                break
+            run.sleeper(delay)
+
         return {
             "tool_results": [TaskExecutionResult(
                 task_id=task.task_id,
                 tool_name=task.tool_name,
                 result=result,
+                retry_count=max(0, attempt_count - 1),
+                max_retry=run.retry_policy.max_retry,
             )],
         }
 
@@ -139,8 +244,12 @@ def build_execution_graph(registry: ToolInvoker, *, context: CallContext | None 
             update["errors"] = new_errors
         return update
 
-    def finalize(raw_state: AgentState | Mapping[str, Any]) -> dict[str, Any]:
+    def finalize(
+        raw_state: AgentState | Mapping[str, Any],
+        runtime: Runtime[ExecutionRuntime],
+    ) -> dict[str, Any]:
         state = _state(raw_state)
+        run = execution_runtime(state.request_id, runtime)
         results_by_id = {item.task_id: item for item in state.tool_results}
         errors_by_id = {item.task_id: item for item in state.errors}
         ordered_results = [results_by_id[task.task_id] for task in state.tasks]
@@ -157,13 +266,19 @@ def build_execution_graph(registry: ToolInvoker, *, context: CallContext | None 
             task_results=ordered_results,
             errors=ordered_errors,
             iteration_count=state.iteration_count,
+            attempt_count=run.budget.attempt_count,
+            execution_duration_ms=run.budget.elapsed_ms(),
+            attempt_budget_exhausted=run.budget.attempt_budget_exhausted,
+            deadline_exceeded=run.budget.deadline_exceeded,
         )
+        with fallback_lock:
+            fallback_runtimes.pop(state.request_id, None)
         return {
             "final_output": final,
             "status": "failed" if final_status == "failed" else "completed",
         }
 
-    builder = StateGraph(AgentState)
+    builder = StateGraph(AgentState, context_schema=ExecutionRuntime)
     builder.add_node("dispatcher", dispatcher)
     builder.add_node("execute_tool", execute_tool)
     builder.add_node("collect_results", collect_results)
@@ -183,23 +298,70 @@ def run_execution_graph(
     *,
     context: CallContext | None = None,
     max_concurrency: int | None = None,
+    retry_policy: RetryPolicy | None = None,
+    clock: Callable[[], float] = monotonic,
+    sleeper: Callable[[float], None] = sleep,
+    initial_results: Sequence[TaskExecutionResult] | None = None,
+    attempt_budget: ToolAttemptBudget | None = None,
 ) -> AgentState:
     """Execute a caller-supplied task graph and return its validated final state."""
-    state = AgentState.from_query(request, list(tasks))
+    task_list = list(tasks)
+    seeded = list(initial_results or [])
+    _validate_initial_results(task_list, seeded)
+    state = AgentState.from_query(request, task_list, tool_results=seeded)
+    policy = retry_policy or RetryPolicy()
+    runtime = ExecutionRuntime(
+        call_context=context or CallContext(),
+        retry_policy=policy,
+        budget=ExecutionBudget(policy, clock=clock, attempt_budget=attempt_budget),
+        sleeper=sleeper,
+    )
     config: dict[str, Any] = {"recursion_limit": max(25, len(tasks) * 4 + 5)}
     if max_concurrency is not None:
         if max_concurrency < 1:
             raise ValueError("max_concurrency must be at least 1")
         config["max_concurrency"] = max_concurrency
-    result = build_execution_graph(registry, context=context).invoke(state, config=config)
+    result = build_execution_graph(
+        registry,
+        context=context,
+        retry_policy=policy,
+        clock=clock,
+        sleeper=sleeper,
+    ).invoke(state, config=config, context=runtime)
     return AgentState.model_validate(result)
+
+
+def _validate_initial_results(
+    tasks: Sequence[Task],
+    results: Sequence[TaskExecutionResult],
+) -> None:
+    task_by_id = {task.task_id: task for task in tasks}
+    if len(task_by_id) != len(tasks):
+        raise ValueError("Task IDs must be unique")
+    result_ids = [item.task_id for item in results]
+    if len(result_ids) != len(set(result_ids)):
+        raise ValueError("Initial result task IDs must be unique")
+    for item in results:
+        task = task_by_id.get(item.task_id)
+        if task is None:
+            raise ValueError("Initial results must belong to the current plan")
+        if item.tool_name != task.tool_name:
+            raise ValueError("Initial result Tool names must match the current plan")
+        if item.result.status == "error":
+            raise ValueError("Initial reusable results must be success or empty")
 
 
 def _state(raw_state: AgentState | Mapping[str, Any]) -> AgentState:
     return raw_state if isinstance(raw_state, AgentState) else AgentState.model_validate(raw_state)
 
 
-def _control_error(task: Task, *, code: str, message: str) -> TaskExecutionResult:
+def _control_error(
+    task: Task,
+    *,
+    code: str,
+    message: str,
+    max_retry: int = 0,
+) -> TaskExecutionResult:
     return TaskExecutionResult(
         task_id=task.task_id,
         tool_name=task.tool_name,
@@ -216,6 +378,7 @@ def _control_error(task: Task, *, code: str, message: str) -> TaskExecutionResul
             ),
             request_id=uuid4(),
         ),
+        max_retry=max_retry,
     )
 
 
@@ -251,16 +414,9 @@ def _resolve_bound_task(
         upstream = completed.get(binding.source_task_id)
         if upstream is None or upstream.result.status == "error":
             return task, ("BINDING_RESOLUTION_FAILED", "Binding source did not complete successfully")
-        value: Any = upstream.result.data
         try:
-            for segment in binding.source_path:
-                if isinstance(segment, int):
-                    value = value[segment]
-                elif isinstance(value, Mapping):
-                    value = value[segment]
-                else:
-                    value = getattr(value, segment)
-        except (AttributeError, IndexError, KeyError, TypeError):
+            value = resolve_result_path(upstream.result.data, binding.source_path)
+        except ResultPathError:
             return task, ("BINDING_RESOLUTION_FAILED", "Binding source value was unavailable at runtime")
         arguments[binding.target_parameter] = value
     model = registry.input_model(task.tool_name)
