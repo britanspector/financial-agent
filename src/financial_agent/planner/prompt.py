@@ -7,6 +7,9 @@ from datetime import date
 from typing import Any
 
 from financial_agent.schemas import UserQuery
+from financial_agent.agent.models import Task, TaskExecutionResult
+from financial_agent.agent.result_projection import project_result
+from financial_agent.verifier.models import VerificationResult
 
 
 PLANNING_RULES = (
@@ -67,6 +70,37 @@ def build_planner_messages(
     payload = {
         "query": request.query,
         "history": [message.model_dump(mode="json") for message in request.history],
+        "tools": tools,
+        "current_date": (current_date or date.today()).isoformat(),
+    }
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))},
+    ]
+
+
+def build_replanner_messages(
+    request: UserQuery,
+    tools: list[dict[str, Any]],
+    previous_plan: list[Task],
+    tool_results: list[TaskExecutionResult],
+    feedback: VerificationResult,
+    *,
+    current_date: date | None = None,
+) -> list[dict[str, str]]:
+    system = (
+        "You are a financial tool replanner. Return a strict JSON full replacement Task DAG. "
+        + PLANNING_RULES
+        + " Reuse unchanged successful or empty tasks by preserving their task_id and exact definition. "
+        "Error results are never reusable. Put a reusable success/empty task_id in force_rerun_task_ids only when a fresh or repeated "
+        "Tool execution is genuinely required. Include every task needed by the replacement plan; omitted old tasks are discarded."
+    )
+    payload = {
+        "query": request.query,
+        "history": [message.model_dump(mode="json") for message in request.history],
+        "previous_plan": [task.model_dump(mode="json") for task in previous_plan],
+        "tool_results": [project_result(item) for item in tool_results],
+        "verifier_feedback": feedback.model_dump(mode="json"),
         "tools": tools,
         "current_date": (current_date or date.today()).isoformat(),
     }

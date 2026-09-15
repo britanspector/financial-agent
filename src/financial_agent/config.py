@@ -50,6 +50,14 @@ class Settings(BaseSettings):
     verifier_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     verifier_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     verifier_temperature: float = Field(default=0.0, ge=0, le=2)
+    answer_model: str = Field(default="qwen3.7-flash", min_length=1)
+    answer_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    answer_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    answer_temperature: float = Field(default=0.1, ge=0, le=2)
+    loop_max_rewrite: int = Field(default=2, ge=0, le=100)
+    loop_max_replan: int = Field(default=2, ge=0, le=100)
+    loop_max_iterations: int = Field(default=5, ge=1, le=1_000)
+    loop_total_tool_budget: int = Field(default=36, ge=1, le=10_000)
     execution_max_retry: int = Field(default=2, ge=0, le=100)
     execution_initial_backoff_seconds: float = Field(default=0.5, ge=0, le=300)
     execution_backoff_multiplier: float = Field(default=2.0, ge=1, le=100)

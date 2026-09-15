@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import TypeAdapter
 
 from financial_agent.agent.models import Task, TaskExecutionResult
+from financial_agent.agent.result_projection import project_result
 from financial_agent.schemas import UserQuery
 from financial_agent.verifier.models import DraftAnswer
 
@@ -68,7 +69,7 @@ def build_verifier_messages(
         "query": request.query,
         "history": [item.model_dump(mode="json") for item in request.history],
         "plan": [item.model_dump(mode="json") for item in plan],
-        "tool_results": [_project_result(item) for item in tool_results],
+        "tool_results": [project_result(item) for item in tool_results],
         "draft": {
             "answer": draft.answer,
             "evidence": resolved_evidence,
@@ -86,17 +87,3 @@ def build_verifier_messages(
             "content": json.dumps(json_payload, ensure_ascii=False, separators=(",", ":")),
         },
     ]
-
-
-def _project_result(item: TaskExecutionResult) -> dict[str, Any]:
-    result = item.result
-    return {
-        "task_id": item.task_id,
-        "tool_name": item.tool_name,
-        "status": result.status,
-        "data": result.data,
-        "source": result.source,
-        "error": result.error.model_dump(mode="json") if result.error else None,
-        "retry_count": item.retry_count,
-        "max_retry": item.max_retry,
-    }

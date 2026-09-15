@@ -2,7 +2,7 @@
 
 用于深度学习和求职展示的本地多工具 Agent 工程探索。全部用户数据为 synthetic，不连接真实公司内部系统。
 
-**当前阶段：Phase 4.2 Structured Verifier 实现完成。** 现有 4 个用户数据 Tool、2 个行情 Tool 和 3 个 RAG Tool 的公开契约可供 Planner 选用；Qwen Planner 生成结构化 Task DAG，Validator 编译安全的结果绑定，执行图提供有界 Tool Retry，独立 Verifier 判断现有结果是否足以回答用户问题。
+**当前阶段：Phase 4.3 Bounded Replan Loop 实现完成。** 现有 4 个用户数据 Tool、2 个行情 Tool 和 3 个 RAG Tool 的公开契约可供 Planner 选用；Qwen Planner 生成结构化 Task DAG，Validator 编译安全的结果绑定，执行图提供有界 Tool Retry，Answer Writer 生成证据引用，Verifier 的 PASS / REWRITE / REPLAN 判定会驱动下一步动作。
 
 ## 项目结构与依赖
 
@@ -13,6 +13,7 @@ financial-agent/
 │   ├── __init__.py / __main__.py / config.py
 │   ├── schemas.py / logging_config.py
 │   ├── agent/                  # AgentState、Task、LangGraph execution graph
+│   ├── answering/              # 证据约束的 Answer Writer 与 Qwen adapter
 │   ├── verifier/               # Structured Verifier、Qwen adapter 与 Eval metrics
 │   ├── demo_faults.py           # 仅测试/demo 使用的故障序列
 │   ├── tools/                  # ToolResult、ToolRegistry、CompositeToolRegistry
@@ -25,6 +26,7 @@ financial-agent/
 │   ├── user_data/              # 数据、权限、Tool、故障、审计、CLI
 │   └── market_data/            # REST Provider、Tool 与 live test
 ├── eval/planner/                # 与 prompt/source 解耦的固定 Planner Eval JSONL
+├── eval/loop/                   # 15 条离线闭环黑盒验收场景
 └── data/
     └── knowledge/              # 72 份 synthetic Markdown 和 manifest.json
 ```
@@ -217,6 +219,44 @@ Verifier 默认复用 `FINANCIAL_AGENT_QWEN_API_KEY`，model、base URL、timeou
 
 2026-09-13 使用真实 `qwen3.7-flash` 运行全部 9 条固定 Verifier Eval：9/9 判定正确，PASS precision 1.0000，REWRITE/REPLAN 混淆率 0.0000，不必要 REPLAN 率 0.0000，漏判 REPLAN 率 0.0000。首轮发现模型曾输出语义为“需要新 Tool”的 reason 却选择 REWRITE；将 response schema 改为按 decision 分支的 strict `oneOf`，并加入逐项核对用户所需证据的一致性检查后复测通过。
 
+## Bounded Replan Loop
+
+Phase 4.3 新增 `financial_agent.loop.run_agent_loop`，将 Planner → Execute → Answer Writer → Verifier 连成有界闭环。PASS 返回最终答案；REWRITE 只把当前 Plan、Tool Results、草稿和 Verifier feedback 交给 Answer Writer，不调 Tool；REPLAN 把已有结果和 feedback 交给 Planner，要求返回完整替换计划，再执行并重新生成答案。Phase 4.3 仍不把循环实现成 LangGraph 节点重调度；单 Task Retry 继续留在一次 `execute_tool` 内部。
+
+默认硬限制是 `max_rewrite=2`、`max_replan=2`、`max_iterations=5`、`total_tool_budget=36`。达到限制时返回 `AgentLoopResult(status="limit_exhausted")`，保留当前草稿、判定、Plan 和 Results，并通过 `stop_reason` 区分具体限制。`iteration_count` 统计 Verifier 调用；每次真实 Tool attempt（包括 retry）都从同一个线程安全的 loop 级预算控制器扣减。预算耗尽只阻止需要 Tool 的 REPLAN，不阻止仍可只用现有证据完成的 REWRITE。每次 execution round 仍使用 Phase 4.1 的 soft start deadline；它不杀死已经开始的同步 Tool。
+
+Replan 输出是完整替换计划和 `force_rerun_task_ids`。Task ID 与标准化后的完整 Task 定义均未变化、且依赖链也全部可复用时，既有 success 默认复用，empty 也默认允许复用；error 永不复用。Planner 可将 success/empty Task ID 显式放入 `force_rerun_task_ids` 取得新结果。被移出替换计划的旧 Result 会立即丢弃，因此每轮当前 Plan 与 Result ID 始终严格一致。只有 Plan 未变化、Results 未变化并且本轮没有开始任何新 Tool attempt 时才判定 `no_progress`。
+
+Answer Writer 默认使用 `qwen3.7-flash` 和 strict structured output，返回 `DraftAnswer(answer, evidence)`。Evidence 路径与 Result Binding、Verifier 共用同一套安全路径语义：始终从 `ToolResult.data` 开始，只允许公开字段和非负 list index。Writer prompt 不包含 request ID、凭证或 latency。
+
+```python
+from financial_agent.agent.retry import RetryPolicy
+from financial_agent.loop import LoopPolicy, run_agent_loop
+
+result = run_agent_loop(
+    request,
+    planner,
+    validator,
+    registry,
+    answer_writer,
+    verifier,
+    policy=LoopPolicy(max_rewrite=2, max_replan=2, max_iterations=5, total_tool_budget=36),
+    retry_policy=RetryPolicy(max_retry=2),
+    context=call_context,
+)
+print(result.answer, result.stop_reason, result.total_tool_attempts)
+```
+
+Answer Writer 由 `FINANCIAL_AGENT_ANSWER_MODEL`、`FINANCIAL_AGENT_ANSWER_BASE_URL`、`FINANCIAL_AGENT_ANSWER_TIMEOUT_SECONDS`、`FINANCIAL_AGENT_ANSWER_TEMPERATURE` 配置；循环限制由 `FINANCIAL_AGENT_LOOP_MAX_REWRITE`、`FINANCIAL_AGENT_LOOP_MAX_REPLAN`、`FINANCIAL_AGENT_LOOP_MAX_ITERATIONS`、`FINANCIAL_AGENT_LOOP_TOTAL_TOOL_BUDGET` 配置。显式构造 `LoopPolicy` 时由调用方传入 `run_agent_loop`。
+
+固定 Loop Eval 位于 `eval/loop/loop_cases.jsonl`，完全离线并通过公开 `run_agent_loop` 入口执行。15 条场景覆盖初次 PASS、零 Tool REWRITE、增加/修改 Task 的 REPLAN、empty force rerun、error 恢复、部分复用、Binding 上游变化、五类停止条件、第五次 Verify 才 PASS，以及首次 retry 与后续 replan 共用预算。运行：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_loop.py
+```
+
+2026-09-15 本机闭环验收结果为 15/15 通过；REWRITE audit 确认 Tool 调用数不变且传入 Writer 的 Result snapshot 未变化。
+
 `CompositeToolRegistry` / `merge_registries()` 仅按工具名路由到原有 User、Market、RAG Registry，不修改 Phase 1 `ToolRegistry` 的注册、校验、鉴权、审计或错误行为。完整运行时可通过 `build_agent_tools(settings)` 组合全部 9 个 Tool；对应的行情和 RAG Provider 仍要求环境变量凭证及已构建的 embedding index。
 
 ```python
@@ -385,6 +425,7 @@ registry = register_user_tools(UserDataService(
 - Phase 3.1 final optimization（2026-09-11）：Planner policy 明确了提供合法标识时不得 clarify、synthetic 实体原样保留、Tool 域优先级、显式顺序依赖和统一 temporal policy；末尾 checklist 进一步强调多实体合并检索、公告/规则路由及 date/dependency 必须落实。Eval 对语义等价 query 与 query 中保留的 entity filter 评分为 acceptable，同时继续严格比较标识、类别与日期。固定 40 条真实 Eval 的 valid plan rate 1.0000、tool selection accuracy 0.8250、argument accuracy 0.7800、temporal accuracy 0.7500、dependency accuracy 0.9000、unnecessary tool call rate 0.0638；完整逐 case 报告见 `reports/phase3_planner_policy_checklist_40.md`。
 - Phase 4.1（2026-09-12）：222 个默认测试通过；Execution Retry 覆盖 retryable/non-retryable 分类、指数退避、全图 attempt 预算、soft deadline、并行预算隔离和 Binding 参数稳定性。
 - Phase 4.2（2026-09-13）：265 个默认测试通过；Structured Verifier 覆盖结构化判定、确定性失败清单、共享 Result Path、输入一致性、Provider 错误和四项边界 Eval 指标；真实 Qwen Eval 独立使用 `-m live` 或脚本运行。
+- Phase 4.3（2026-09-15）：293 个默认测试通过，15/15 固定 Loop Eval 通过；闭环覆盖 PASS/REWRITE/REPLAN 路由、完整替换计划、success/empty 复用、force rerun、error 不复用、旧结果裁剪、依赖安全失效、跨轮共享 Tool attempt 预算和 no-progress 三条件判定。
 - 覆盖四个业务 Tool、FastAPI endpoint、Async HTTP Client、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
 - Market Data 测试使用 `httpx.MockTransport`，不访问 live provider；live smoke test 使用 `pytest -m live` 单独运行。
 
@@ -403,14 +444,14 @@ registry = register_user_tools(UserDataService(
 - 单个 Task 内的有界 Tool Retry、指数退避、全图 attempt 预算和禁止新 attempt 的 soft deadline。
 - 结构化 Result Binding、公开输出字段白名单、运行期结果路径解析和 plan → validate → execute 统一入口。
 - Provider 解耦的 Structured Verifier、严格 PASS/REWRITE/REPLAN schema、确定性 failed_task_ids 和固定 Verifier Eval Set。
+- Verifier 驱动的有界 Agent Loop、证据约束 Answer Writer、完整 Replan、依赖安全结果复用、显式 force rerun 和跨轮 Tool attempt 总预算。
 - Prompt-independent 的 40 条 Planner Eval Set：单/并行/依赖、三源组合、当前/历史时间、RAG filters、法规、FAQ、无关 Tool 与 abstain 边界，以及六项离线/真实模型通用指标。
 
 ## 已知限制
 
-- Verifier 只返回判定，尚未自动执行 Rewrite/Replan，也没有 Context Manager 或 Agentic RL。
+- 闭环已执行 Rewrite/Replan，但没有 Context Manager、跨进程 checkpoint、人工审批点或 Agentic RL。
 - Result Binding 只支持公开结果中的字段名和非负 list index，不支持 JSONPath、表达式或复杂变换。
-- clarify/no_tool 只表达 Planner 决策；本阶段仍未实现面向用户的澄清文案。
-- 统一入口已连接 Planner、Validator 与 execution graph，但尚未生成面向用户的草稿答案。
+- clarify/no_tool 只表达 Planner 决策；本阶段仍未生成面向用户的澄清或 no-tool 文案。
 - Eval Set 对 Tool/参数/依赖边做固定语义匹配，但尚未覆盖同义 query rewrite、重复同名 Tool 实例的边身份、统计置信区间、成本和延迟。
 - Graph 尚未提供持久化 checkpoint、跨进程恢复、任务取消或生产级并发配额。
 - 真实 Qwen index 和 live smoke test 依赖宿主通过环境变量提供 API Key；默认测试不会访问外网。
@@ -422,6 +463,6 @@ registry = register_user_tools(UserDataService(
 
 ## 下一步
 
-下一阶段可在 Structured Verifier 之上分别接入受限 Rewrite 与 Replan 闭环，并为循环次数、跨轮证据和上下文长度增加统一预算；草稿答案生成与面向用户的澄清文案仍需独立设计。
+下一阶段可增加 Context Manager、prompt/token/cost 预算、循环 trace 持久化、真实 Provider 闭环 Eval，并补充面向用户的 clarify/no_tool 文案。
 
 后续工程约束：外部模型和数据源必须经 adapter/registry，LangGraph node 不直接依赖 provider SDK；API key 仅由环境配置注入；所有用户数据为 synthetic；每个功能补测试，并同步更新 README 的“当前能力 / 已知限制 / 下一步”。

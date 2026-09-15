@@ -7,8 +7,10 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel
 
-from financial_agent.planner.models import StructuredPlan
-from financial_agent.planner.prompt import build_planner_messages
+from financial_agent.agent.models import Task, TaskExecutionResult
+from financial_agent.planner.models import ReplanOutput, StructuredPlan
+from financial_agent.planner.prompt import build_planner_messages, build_replanner_messages
+from financial_agent.verifier.models import VerificationResult
 from financial_agent.planner.providers import PlannerProvider
 from financial_agent.schemas import Schema, UserQuery
 
@@ -31,6 +33,25 @@ class StructuredPlanner:
             response_schema=response_schema,
         )
         return StructuredPlan.model_validate(payload)
+
+    def replan(
+        self,
+        request: UserQuery,
+        previous_plan: list[Task],
+        tool_results: list[TaskExecutionResult],
+        feedback: VerificationResult,
+    ) -> ReplanOutput:
+        tools = self._catalog.describe()
+        payload = self._provider.generate(
+            build_replanner_messages(request, tools, previous_plan, tool_results, feedback),
+            response_schema=_replan_response_schema(tools),
+        )
+        output = ReplanOutput.model_validate(payload)
+        task_ids = [task.task_id for task in output.tasks]
+        forced = output.force_rerun_task_ids
+        if len(forced) != len(set(forced)) or not set(forced).issubset(task_ids):
+            raise ValueError("force_rerun_task_ids must be unique IDs in the replacement plan")
+        return output
 
 
 def _tool_aware_response_schema(tools: list[dict[str, Any]]) -> dict[str, Any]:
@@ -91,6 +112,19 @@ def _tool_aware_response_schema(tools: list[dict[str, Any]]) -> dict[str, Any]:
         for decision in ("clarify", "no_tool")
     ]
     return {"oneOf": [execute, *non_execution]}
+
+
+def _replan_response_schema(tools: list[dict[str, Any]]) -> dict[str, Any]:
+    execute = _tool_aware_response_schema(tools)["oneOf"][0]
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "tasks": execute["properties"]["tasks"],
+            "force_rerun_task_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        },
+        "required": ["tasks", "force_rerun_task_ids"],
+    }
 
 
 def _strictify_object_schema(schema: dict[str, Any]) -> dict[str, Any]:

@@ -20,7 +20,7 @@ from financial_agent.agent.models import (
     Task,
     TaskExecutionResult,
 )
-from financial_agent.agent.retry import ExecutionBudget, RetryPolicy
+from financial_agent.agent.retry import ExecutionBudget, RetryPolicy, ToolAttemptBudget
 from financial_agent.agent.result_path import ResultPathError, resolve_result_path
 from financial_agent.schemas import UserQuery
 from financial_agent.tools.contracts import ToolError, ToolResult
@@ -301,14 +301,19 @@ def run_execution_graph(
     retry_policy: RetryPolicy | None = None,
     clock: Callable[[], float] = monotonic,
     sleeper: Callable[[float], None] = sleep,
+    initial_results: Sequence[TaskExecutionResult] | None = None,
+    attempt_budget: ToolAttemptBudget | None = None,
 ) -> AgentState:
     """Execute a caller-supplied task graph and return its validated final state."""
-    state = AgentState.from_query(request, list(tasks))
+    task_list = list(tasks)
+    seeded = list(initial_results or [])
+    _validate_initial_results(task_list, seeded)
+    state = AgentState.from_query(request, task_list, tool_results=seeded)
     policy = retry_policy or RetryPolicy()
     runtime = ExecutionRuntime(
         call_context=context or CallContext(),
         retry_policy=policy,
-        budget=ExecutionBudget(policy, clock=clock),
+        budget=ExecutionBudget(policy, clock=clock, attempt_budget=attempt_budget),
         sleeper=sleeper,
     )
     config: dict[str, Any] = {"recursion_limit": max(25, len(tasks) * 4 + 5)}
@@ -324,6 +329,26 @@ def run_execution_graph(
         sleeper=sleeper,
     ).invoke(state, config=config, context=runtime)
     return AgentState.model_validate(result)
+
+
+def _validate_initial_results(
+    tasks: Sequence[Task],
+    results: Sequence[TaskExecutionResult],
+) -> None:
+    task_by_id = {task.task_id: task for task in tasks}
+    if len(task_by_id) != len(tasks):
+        raise ValueError("Task IDs must be unique")
+    result_ids = [item.task_id for item in results]
+    if len(result_ids) != len(set(result_ids)):
+        raise ValueError("Initial result task IDs must be unique")
+    for item in results:
+        task = task_by_id.get(item.task_id)
+        if task is None:
+            raise ValueError("Initial results must belong to the current plan")
+        if item.tool_name != task.tool_name:
+            raise ValueError("Initial result Tool names must match the current plan")
+        if item.result.status == "error":
+            raise ValueError("Initial reusable results must be success or empty")
 
 
 def _state(raw_state: AgentState | Mapping[str, Any]) -> AgentState:

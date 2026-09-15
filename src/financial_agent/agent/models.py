@@ -98,10 +98,19 @@ class AgentState(Schema):
         return self
 
     @classmethod
-    def from_query(cls, request: UserQuery, tasks: list[Task]) -> "AgentState":
+    def from_query(
+        cls,
+        request: UserQuery,
+        tasks: list[Task],
+        *,
+        tool_results: list[TaskExecutionResult] | None = None,
+    ) -> "AgentState":
+        seeded = list(tool_results or [])
         return cls(
             request_id=request.request_id,
             query=request.query,
             history=request.history,
             tasks=tasks,
+            tool_results=seeded,
+            collected_result_count=len(seeded),
         )
