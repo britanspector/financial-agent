@@ -56,9 +56,15 @@ def test_qwen_secret_and_model_defaults(monkeypatch):
     assert settings.answer_temperature == 0.1
     assert settings.context_strategy == "full_history"
     assert settings.context_last_n == 6
+    assert settings.context_summary_recent_n == 3
+    assert settings.context_summary_budget_ratio == 0.4
+    assert settings.context_summary_cache_size == 128
+    assert settings.context_summary_max_facts == 24
     assert settings.planner_context_budget_tokens == 4096
     assert settings.answer_context_budget_tokens == 4096
     assert settings.verifier_context_budget_tokens == 4096
+    assert settings.summary_model == "qwen3.7-flash"
+    assert settings.summary_temperature == 0
     assert settings.loop_max_rewrite == 2
     assert settings.loop_max_replan == 2
     assert settings.loop_max_iterations == 5
@@ -138,6 +144,10 @@ def test_invalid_agent_loop_settings_rejected(monkeypatch, key, value):
 @pytest.mark.parametrize(("key", "value"), [
     ("CONTEXT_STRATEGY", "unknown"),
     ("CONTEXT_LAST_N", "-1"),
+    ("CONTEXT_SUMMARY_RECENT_N", "-1"),
+    ("CONTEXT_SUMMARY_BUDGET_RATIO", "1.1"),
+    ("CONTEXT_SUMMARY_CACHE_SIZE", "-1"),
+    ("CONTEXT_SUMMARY_MAX_FACTS", "0"),
     ("PLANNER_CONTEXT_BUDGET_TOKENS", "-1"),
     ("ANSWER_CONTEXT_BUDGET_TOKENS", "-1"),
     ("VERIFIER_CONTEXT_BUDGET_TOKENS", "-1"),

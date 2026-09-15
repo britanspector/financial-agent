@@ -21,14 +21,21 @@ def test_fixed_context_eval_cases_are_unique_and_cover_expected_scenarios():
     assert {item.kind for case in cases for item in case.critical_context} == {
         "entity", "constraint", "context",
     }
+    assert all(
+        item.hard_required
+        for case in cases for item in case.critical_context
+        if item.kind in {"entity", "constraint"}
+    )
 
 
 def test_context_eval_reports_four_phase5_baseline_metrics_per_strategy():
     report = evaluate_context_selection(load_context_eval_cases(CASES))
     assert [item.strategy for item in report.strategies] == [
-        "full_history", "last_n", "budgeted_selection",
+        "full_history", "last_n", "budgeted_selection", "summary_compression",
     ]
     assert all(item.case_count == 12 for item in report.strategies)
+    assert report.summary_baseline_passed
+    assert report.summary_failed_case_ids == []
     assert report.strategies[0].critical_context_retention_rate == 1
     assert report.strategies[0].history_token_compression_ratio == 1
     assert report.strategies[0].planner_plan_equivalence_rate == 1
@@ -39,6 +46,7 @@ def test_context_eval_reports_four_phase5_baseline_metrics_per_strategy():
         "planner_plan_equivalence_rate",
         "critical_entity_or_constraint_loss_rate",
     }
+    assert report_summary(report)["summary_baseline_passed"] is True
 
 
 def test_budgeted_baseline_has_no_catastrophic_information_loss():
@@ -66,6 +74,13 @@ def test_fixed_strategy_baseline_values_are_stable():
     assert metrics["budgeted_selection"].history_token_compression_ratio == pytest.approx(0.8227272727)
     assert metrics["budgeted_selection"].planner_plan_equivalence_rate == 1
     assert metrics["budgeted_selection"].critical_entity_or_constraint_loss_rate == 0
+    assert metrics["summary_compression"].critical_context_retention_rate == 1
+    assert metrics["summary_compression"].history_token_compression_ratio == pytest.approx(0.8505681818)
+    assert metrics["summary_compression"].planner_plan_equivalence_rate == 1
+    assert metrics["summary_compression"].critical_entity_or_constraint_loss_rate == 0
+    assert all(
+        item.passed for item in report.cases if item.strategy == "summary_compression"
+    )
 
 
 def test_empty_eval_is_rejected():

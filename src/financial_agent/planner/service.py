@@ -37,12 +37,15 @@ class StructuredPlanner:
         self._context_policy = context_policy or ContextPolicy()
 
     def plan(self, request: UserQuery) -> StructuredPlan:
-        contextual_request = self._context_manager.select(
+        selection = self._context_manager.select(
             request, "planner", self._context_policy,
-        ).request
+        )
+        contextual_request = selection.request
         response_schema = _tool_aware_response_schema(self._catalog.describe())
         payload = self._provider.generate(
-            build_planner_messages(contextual_request, self._catalog.describe()),
+            build_planner_messages(
+                contextual_request, self._catalog.describe(), history_summary=selection.summary,
+            ),
             response_schema=response_schema,
         )
         return StructuredPlan.model_validate(payload)
@@ -54,12 +57,16 @@ class StructuredPlanner:
         tool_results: list[TaskExecutionResult],
         feedback: VerificationResult,
     ) -> ReplanOutput:
-        contextual_request = self._context_manager.select(
+        selection = self._context_manager.select(
             request, "planner", self._context_policy,
-        ).request
+        )
+        contextual_request = selection.request
         tools = self._catalog.describe()
         payload = self._provider.generate(
-            build_replanner_messages(contextual_request, tools, previous_plan, tool_results, feedback),
+            build_replanner_messages(
+                contextual_request, tools, previous_plan, tool_results, feedback,
+                history_summary=selection.summary,
+            ),
             response_schema=_replan_response_schema(tools),
         )
         output = ReplanOutput.model_validate(payload)

@@ -9,6 +9,7 @@ from financial_agent.agent.models import Task, TaskExecutionResult
 from financial_agent.agent.result_projection import project_result
 from financial_agent.schemas import UserQuery
 from financial_agent.verifier.models import DraftAnswer, VerificationResult
+from financial_agent.context.models import HistorySummary
 
 
 def answer_response_schema() -> dict[str, Any]:
@@ -37,6 +38,7 @@ def build_answer_messages(
     *,
     previous_draft: DraftAnswer | None = None,
     feedback: VerificationResult | None = None,
+    history_summary: HistorySummary | None = None,
 ) -> list[dict[str, str]]:
     rewriting = previous_draft is not None
     system = (
@@ -57,6 +59,9 @@ def build_answer_messages(
         "previous_draft": previous_draft.model_dump(mode="json") if previous_draft else None,
         "verifier_feedback": feedback.model_dump(mode="json") if feedback else None,
     }
+    if history_summary is not None:
+        system += " Treat history_summary as grounded compressed history; current query and raw history take precedence."
+        payload["history_summary"] = history_summary.model_dump(mode="json")
     serialized = TypeAdapter(Any).dump_python(payload, mode="json")
     return [
         {"role": "system", "content": system},

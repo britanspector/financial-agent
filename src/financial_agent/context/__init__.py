@@ -7,6 +7,17 @@ from financial_agent.context.models import (
     ContextPolicy,
     ContextSelection,
     ContextStrategy,
+    HistorySummary,
+    SummaryFact,
+)
+from financial_agent.context.qwen_summary_provider import QwenSummaryProvider
+from financial_agent.context.summarizer import HistorySummarizer
+from financial_agent.context.summary_providers import (
+    SummaryProvider,
+    SummaryProviderError,
+    SummaryProviderResponseError,
+    SummaryProviderTimeoutError,
+    SummaryProviderUnavailableError,
 )
 from financial_agent.context.runtime import build_context_manager, context_policy_from_settings
 from financial_agent.context.token_estimation import HeuristicTokenEstimator, TokenEstimator
@@ -18,7 +29,16 @@ __all__ = [
     "ContextPolicy",
     "ContextSelection",
     "ContextStrategy",
+    "HistorySummarizer",
+    "HistorySummary",
     "HeuristicTokenEstimator",
+    "QwenSummaryProvider",
+    "SummaryFact",
+    "SummaryProvider",
+    "SummaryProviderError",
+    "SummaryProviderResponseError",
+    "SummaryProviderTimeoutError",
+    "SummaryProviderUnavailableError",
     "TokenEstimator",
     "build_context_manager",
     "context_policy_from_settings",

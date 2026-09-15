@@ -8,7 +8,7 @@ import pytest
 from financial_agent.agent.models import Task, TaskExecutionResult
 from financial_agent.answering.runtime import build_answer_writer
 from financial_agent.config import Settings
-from financial_agent.context import ContextManager, HeuristicTokenEstimator
+from financial_agent.context import ContextManager, HeuristicTokenEstimator, build_context_manager
 from financial_agent.planner.runtime import build_planner
 from financial_agent.schemas import Message, Schema, UserQuery
 from financial_agent.tools.contracts import ToolResult
@@ -43,6 +43,11 @@ class Provider:
     def generate(self, messages, *, response_schema):
         self.calls.append((messages, response_schema))
         return self.output
+
+
+class UnitEstimator:
+    def estimate_messages(self, messages):
+        return len(messages)
 
 
 def request():
@@ -172,10 +177,47 @@ def test_replan_and_rewrite_also_apply_selected_history():
     assert payload(writer_provider)["history"] == expected
 
 
+def test_shared_summary_is_sent_separately_to_all_component_prompts():
+    settings = Settings(
+        context_strategy="summary_compression",
+        context_summary_recent_n=1,
+        planner_context_budget_tokens=2,
+        answer_context_budget_tokens=2,
+        verifier_context_budget_tokens=2,
+        qwen_api_key=None,
+    )
+    summary_provider = Provider({"facts": [{
+        "category": "planning_fact", "content": "old", "source_message_index": 0,
+    }]})
+    manager = build_context_manager(
+        UnitEstimator(), settings=settings, summary_provider=summary_provider,
+    )
+    catalog = Catalog()
+    task, result = inputs()
+    shared_request = request()
+
+    planner_provider = Provider({"decision": "no_tool", "tasks": []})
+    planner, _ = build_planner(settings, catalog, provider=planner_provider, context_manager=manager)
+    planner.plan(shared_request)
+    writer_provider = Provider({
+        "answer": "7", "evidence": [{"task_id": "t1", "source_path": ["value"]}],
+    })
+    writer = build_answer_writer(settings, catalog, provider=writer_provider, context_manager=manager)
+    draft = writer.write(shared_request, [task], [result])
+    verifier_provider = Provider({"decision": "PASS", "reason": "enough", "missing_evidence": []})
+    verifier = build_verifier(settings, catalog, provider=verifier_provider, context_manager=manager)
+    verifier.verify(shared_request, [task], [result], draft)
+
+    for model_provider in (planner_provider, writer_provider, verifier_provider):
+        assert payload(model_provider)["history"] == [{"role": "user", "content": "latest"}]
+        assert payload(model_provider)["history_summary"]["facts"][0]["source_message_index"] == 0
+    assert len(summary_provider.calls) == 1
+
+
 def test_runtime_rejects_two_context_extension_points_at_once():
     settings = Settings(qwen_api_key=None)
     provider = Provider({"decision": "no_tool", "tasks": []})
-    with pytest.raises(ValueError, match="Pass context_manager or token_estimator, not both"):
+    with pytest.raises(ValueError, match="Pass context_manager or context dependencies, not both"):
         build_planner(
             settings,
             Catalog(),

@@ -35,9 +35,10 @@ class AnswerWriter:
         return self._generate(request, plan, results, previous_draft=draft, feedback=feedback)
 
     def _generate(self, request, plan, results, *, previous_draft=None, feedback=None) -> DraftAnswer:
-        contextual_request = self._context_manager.select(
+        selection = self._context_manager.select(
             request, "writer", self._context_policy,
-        ).request
+        )
+        contextual_request = selection.request
         raw = self._provider.generate(
             build_answer_messages(
                 contextual_request,
@@ -45,6 +46,7 @@ class AnswerWriter:
                 results,
                 previous_draft=previous_draft,
                 feedback=feedback,
+                history_summary=selection.summary,
             ),
             response_schema=answer_response_schema(),
         )

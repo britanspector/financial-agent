@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from financial_agent.context.manager import ContextManager
 from financial_agent.context.models import ContextMetrics, ContextPolicy, ContextStrategy
@@ -19,6 +19,13 @@ class CriticalContextItem(Schema):
     kind: Literal["entity", "constraint", "context"]
     source_role: Literal["user", "assistant"] = "user"
     planner_required: bool = True
+    hard_required: bool | None = None
+
+    @model_validator(mode="after")
+    def default_hard_requirement(self):
+        if self.hard_required is None:
+            self.hard_required = self.kind in {"entity", "constraint"}
+        return self
 
 
 class ContextEvalCase(Schema):
@@ -38,6 +45,8 @@ class ContextEvalObservation(Schema):
     retained_keys: list[str]
     lost_keys: list[str]
     planner_equivalent_to_full_history: bool
+    passed: bool = True
+    failure_reasons: list[str] = Field(default_factory=list)
 
 
 class ContextStrategyMetrics(Schema):
@@ -56,6 +65,8 @@ class ContextEvaluationReport(Schema):
     budget_tokens: int = Field(ge=0)
     strategies: list[ContextStrategyMetrics]
     cases: list[ContextEvalObservation]
+    summary_baseline_passed: bool
+    summary_failed_case_ids: list[str] = Field(default_factory=list)
 
 
 def load_context_eval_cases(path: Path) -> list[ContextEvalCase]:
@@ -84,11 +95,15 @@ def evaluate_context_selection(
 ) -> ContextEvaluationReport:
     if not cases:
         raise ValueError("At least one context eval case is required")
-    selector = manager or ContextManager()
+    selector = manager or _offline_summary_manager()
     policies = [
         ContextPolicy(strategy="full_history", last_n=last_n, budget_tokens=budget_tokens),
         ContextPolicy(strategy="last_n", last_n=last_n, budget_tokens=budget_tokens),
         ContextPolicy(strategy="budgeted_selection", last_n=last_n, budget_tokens=budget_tokens),
+        ContextPolicy(
+            strategy="summary_compression", last_n=last_n, budget_tokens=budget_tokens,
+            summary_recent_n=3, summary_budget_ratio=0.4,
+        ),
     ]
     observations: list[ContextEvalObservation] = []
     for case in cases:
@@ -97,9 +112,15 @@ def evaluate_context_selection(
             selection = selector.select(case.request(), "planner", policy)
             retained = [
                 item.key for item in case.critical_context
-                if _item_is_available(item, selection.request)
+                if _item_is_available(item, selection.request, selection.summary, case.history)
             ]
             lost = [item.key for item in case.critical_context if item.key not in retained]
+            hard_lost = [item.key for item in case.critical_context if item.hard_required and item.key in lost]
+            failures = []
+            if policy.strategy == "summary_compression" and hard_lost:
+                failures.append("hard_required context lost: " + ", ".join(hard_lost))
+            if policy.strategy == "summary_compression" and selection.metrics.selected_tokens > budget_tokens:
+                failures.append("history token budget exceeded")
             observations.append(ContextEvalObservation(
                 case_id=case.case_id,
                 strategy=policy.strategy,
@@ -107,35 +128,64 @@ def evaluate_context_selection(
                 retained_keys=retained,
                 lost_keys=lost,
                 planner_equivalent_to_full_history=(
-                    _planner_probe_signature(case, selection.request) == full_signature
+                    _planner_probe_signature(
+                        case, selection.request, selection.summary, case.history,
+                    ) == full_signature
                 ),
+                passed=not failures,
+                failure_reasons=failures,
             ))
 
     strategy_metrics = [
         _aggregate_strategy(strategy, cases, observations)
-        for strategy in ("full_history", "last_n", "budgeted_selection")
+        for strategy in ("full_history", "last_n", "budgeted_selection", "summary_compression")
     ]
+    summary_metrics = next(item for item in strategy_metrics if item.strategy == "summary_compression")
+    failed_case_ids = [
+        item.case_id for item in observations
+        if item.strategy == "summary_compression" and not item.passed
+    ]
+    baseline_passed = (
+        not failed_case_ids
+        and summary_metrics.critical_context_retention_rate >= 0.90
+        and summary_metrics.planner_plan_equivalence_rate >= 0.90
+        and summary_metrics.critical_entity_or_constraint_loss_rate <= 0.10
+    )
     return ContextEvaluationReport(
         case_count=len(cases),
         last_n=last_n,
         budget_tokens=budget_tokens,
         strategies=strategy_metrics,
         cases=observations,
+        summary_baseline_passed=baseline_passed,
+        summary_failed_case_ids=failed_case_ids,
     )
 
 
-def _item_is_available(item: CriticalContextItem, request: UserQuery) -> bool:
+def _item_is_available(item, request, summary=None, original_history=None) -> bool:
     if item.value in request.query:
         return True
-    return any(
+    if any(
         message.role == item.source_role and item.value in message.content
         for message in request.history
+    ):
+        return True
+    if summary is None or original_history is None:
+        return False
+    return any(
+        fact.source_message_index < len(original_history)
+        and original_history[fact.source_message_index].role == item.source_role
+        and item.value in fact.content
+        for fact in summary.facts
     )
 
 
-def _planner_probe_signature(case: ContextEvalCase, request: UserQuery) -> tuple[str, ...]:
+def _planner_probe_signature(case, request, summary=None, original_history=None) -> tuple[str, ...]:
     required = [item for item in case.critical_context if item.planner_required]
-    available = sorted(item.key for item in required if _item_is_available(item, request))
+    available = sorted(
+        item.key for item in required
+        if _item_is_available(item, request, summary, original_history)
+    )
     if len(available) != len(required):
         return ("clarify", *available)
     return ("execute", case.case_id, *available)
@@ -182,9 +232,40 @@ def report_summary(report: ContextEvaluationReport) -> dict[str, object]:
         "planner_probe": report.planner_probe,
         "last_n": report.last_n,
         "budget_tokens": report.budget_tokens,
+        "summary_baseline_passed": report.summary_baseline_passed,
+        "summary_failed_case_ids": report.summary_failed_case_ids,
         "strategies": [item.model_dump(mode="json") for item in report.strategies],
     }
 
 
 def write_json_report(report: ContextEvaluationReport, path: Path) -> None:
     path.write_text(json.dumps(report.model_dump(mode="json"), ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+class _OfflineSummaryProvider:
+    """Deterministic extractive fixture; never used by production runtime."""
+
+    def generate(self, messages, *, response_schema):
+        del response_schema
+        payload = json.loads(messages[1]["content"])
+        facts = []
+        for item in payload["summarized_history"]:
+            if item["role"] != "user":
+                continue
+            content = item["content"]
+            category = "planning_fact"
+            if any(word in content for word in ("不要", "只", "仅", "必须", "更正", "改为", "为准", "先查")):
+                category = "constraint"
+            elif any(char.isdigit() for char in content):
+                category = "entity"
+            facts.append({
+                "category": category,
+                "content": content,
+                "source_message_index": item["index"],
+            })
+        return {"facts": facts}
+
+
+def _offline_summary_manager() -> ContextManager:
+    from financial_agent.context.summarizer import HistorySummarizer
+    return ContextManager(summarizer=HistorySummarizer(_OfflineSummaryProvider(), max_facts=100))

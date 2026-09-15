@@ -53,9 +53,10 @@ class StructuredVerifier:
             raise InvalidVerificationInputError(str(exc)) from exc
         ordered_results = [result_by_id[task.task_id] for task in tasks]
         failed_task_ids = [task.task_id for task in tasks if result_by_id[task.task_id].result.status == "error"]
-        contextual_request = self._context_manager.select(
+        selection = self._context_manager.select(
             request, "verifier", self._context_policy,
-        ).request
+        )
+        contextual_request = selection.request
         raw = self._provider.generate(
             build_verifier_messages(
                 contextual_request,
@@ -64,6 +65,7 @@ class StructuredVerifier:
                 draft,
                 resolved_evidence=resolved_evidence,
                 failed_task_ids=failed_task_ids,
+                history_summary=selection.summary,
             ),
             response_schema=verifier_response_schema(),
         )

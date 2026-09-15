@@ -11,6 +11,7 @@ from financial_agent.agent.models import Task, TaskExecutionResult
 from financial_agent.agent.result_projection import project_result
 from financial_agent.schemas import UserQuery
 from financial_agent.verifier.models import DraftAnswer
+from financial_agent.context.models import HistorySummary
 
 
 VERIFICATION_RULES = (
@@ -64,6 +65,7 @@ def build_verifier_messages(
     *,
     resolved_evidence: list[dict[str, Any]],
     failed_task_ids: list[str],
+    history_summary: HistorySummary | None = None,
 ) -> list[dict[str, str]]:
     payload = {
         "query": request.query,
@@ -76,11 +78,16 @@ def build_verifier_messages(
         },
         "failed_task_ids": failed_task_ids,
     }
+    if history_summary is not None:
+        payload["history_summary"] = history_summary.model_dump(mode="json")
     json_payload = TypeAdapter(Any).dump_python(payload, mode="json")
     return [
         {
             "role": "system",
-            "content": "You are a financial answer verifier. Return strict JSON matching the supplied schema. " + VERIFICATION_RULES,
+            "content": "You are a financial answer verifier. Return strict JSON matching the supplied schema. "
+            + VERIFICATION_RULES
+            + (" Treat history_summary as grounded compressed history; current query and raw history take precedence."
+               if history_summary is not None else ""),
         },
         {
             "role": "user",

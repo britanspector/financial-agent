@@ -2,7 +2,7 @@
 
 用于深度学习和求职展示的本地多工具 Agent 工程探索。全部用户数据为 synthetic，不连接真实公司内部系统。
 
-**当前阶段：Phase 5.1 Context Budget + Selection 实现完成。** 现有 4 个用户数据 Tool、2 个行情 Tool 和 3 个 RAG Tool 的公开契约可供 Planner 选用；Qwen Planner、Answer Writer 和 Verifier 统一通过 Context Manager 获取受策略和预算控制的历史上下文，Phase 4.3 的有界 Rewrite/Replan 闭环保持不变。
+**当前阶段：Phase 5.2 Summary Compression 实现完成。** 现有 4 个用户数据 Tool、2 个行情 Tool 和 3 个 RAG Tool 的公开契约可供 Planner 选用；Planner、Answer Writer 和 Verifier 统一通过 Context Manager 获取受预算控制的历史上下文，并可显式启用 grounded summary compression。默认仍为 `full_history`，Phase 4.3 的有界 Rewrite/Replan 闭环保持不变。
 
 ## 项目结构与依赖
 
@@ -14,7 +14,7 @@ financial-agent/
 │   ├── schemas.py / logging_config.py
 │   ├── agent/                  # AgentState、Task、LangGraph execution graph
 │   ├── answering/              # 证据约束的 Answer Writer 与 Qwen adapter
-│   ├── context/                # Context policy、确定性 selection、token estimation
+│   ├── context/                # Context policy、selection、grounded summary、token estimation
 │   ├── verifier/               # Structured Verifier、Qwen adapter 与 Eval metrics
 │   ├── demo_faults.py           # 仅测试/demo 使用的故障序列
 │   ├── tools/                  # ToolResult、ToolRegistry、CompositeToolRegistry
@@ -261,9 +261,13 @@ Answer Writer 由 `FINANCIAL_AGENT_ANSWER_MODEL`、`FINANCIAL_AGENT_ANSWER_BASE_
 
 ## Context Manager
 
-Phase 5.1 新增 `financial_agent.context.ContextManager`。Planner、Answer Writer 和 Verifier 在构造原有 prompt 前均通过同一接口选择 `UserQuery.history`；`query` 和 `request_id` 原样保留，原请求不会被修改。默认 `full_history` 与 Phase 4 行为兼容，`last_n` 按“一个 user 消息及其后连续 assistant 消息”为一轮保留最近 N 轮，`budgeted_selection` 在各组件独立的 history token budget 内确定性选择完整轮次。历史开头的连续 assistant 消息组成独立首轮，`last_n=0` 可显式丢弃全部历史。
+Phase 5.1 新增 `financial_agent.context.ContextManager`，Phase 5.2 在同一契约上增加显式 `summary_compression`。Planner、Answer Writer 和 Verifier 在构造原有 prompt 前均通过该接口选择 `UserQuery.history`；`query` 和 `request_id` 原样保留，原请求不会被修改。默认 `full_history` 与 Phase 4 行为兼容，`last_n` 按“一个 user 消息及其后连续 assistant 消息”为一轮保留最近 N 轮，`budgeted_selection` 在各组件独立的 history token budget 内确定性选择完整轮次。历史开头的连续 assistant 消息组成独立首轮，`last_n=0` 可显式丢弃全部历史。
 
 `budgeted_selection` 优先尝试最新一轮；如果该轮本身超预算，会跳过并继续选择其他能装入预算的候选。其余候选综合 recency、与当前 query 的 lexical overlap、明确的 user ID / A 股证券代码 / 日期实体重叠，以及 user role 中的约束、纠正和确认语义排序。中文相关性使用固定 bigram，不把简单正则当作通用公司/机构 NER；公司和机构名称主要依赖 lexical overlap。assistant 的普通“收到/已确认”不会获得约束确认加权。选择以完整轮次为单位，不截断消息；只有 current query 无条件完整保留。
+
+`summary_compression` 仅在 history 超过组件 budget 时调用 `SummaryProvider`：旧历史生成严格结构化、逐条可回指原消息绝对索引的 `HistorySummary`，最近若干完整轮次保留原文，current query 始终完整保留。user ID、明确 symbol、日期/时间范围和用户显式约束由确定性 protected-fact 校验兜底；后续“更正/改为/以…为准”会覆盖同类旧值并 grounding 到纠正消息。普通 assistant 确认话术不形成事实。摘要以独立 `history_summary` JSON 字段进入 Planner/Writer/Verifier prompt，不伪装成 history message；未实际使用摘要时 payload 完全沿用 Phase 5.1 形状。
+
+`summary_budget_ratio=0.4` 只是摘要的初始配额。recent raw 与 summary 可借用对方未使用的预算，但最终 `packed summary + raw history` 不得超过组件 history budget；fact packing 按 constraint、entity、time range、confirmed intent、planning fact 排序，不截断事实文本。摘要为空、grounding/provider 失败、protected facts 无法全部装入等情况会安全回退 `budgeted_selection`。Context Manager 的线程安全有界 LRU 只缓存完整、已 grounding 的摘要；各组件按自己的 budget 独立 packing。只有 request ID、query、summarized prefix、recent context 和 schema version 全部一致才命中缓存，可用 `clear_summary_cache()` 清理。
 
 默认 `HeuristicTokenEstimator` 对紧凑 message JSON 的 UTF-8 字节数做稳定估算，它不是具体模型 tokenizer。调用方可通过 `TokenEstimator.estimate_messages()` 协议注入其他估算实现。budget 和 `original_tokens` / `selected_tokens` 只统计 history，不包含 query、system prompt、tools、plan、Tool Results、draft 或 verifier feedback。
 
@@ -285,10 +289,20 @@ print(selection.request.history, selection.metrics)
 ```text
 FINANCIAL_AGENT_CONTEXT_STRATEGY=full_history
 FINANCIAL_AGENT_CONTEXT_LAST_N=6
+FINANCIAL_AGENT_CONTEXT_SUMMARY_RECENT_N=3
+FINANCIAL_AGENT_CONTEXT_SUMMARY_BUDGET_RATIO=0.4
+FINANCIAL_AGENT_CONTEXT_SUMMARY_CACHE_SIZE=128
+FINANCIAL_AGENT_CONTEXT_SUMMARY_MAX_FACTS=24
 FINANCIAL_AGENT_PLANNER_CONTEXT_BUDGET_TOKENS=4096
 FINANCIAL_AGENT_ANSWER_CONTEXT_BUDGET_TOKENS=4096
 FINANCIAL_AGENT_VERIFIER_CONTEXT_BUDGET_TOKENS=4096
+FINANCIAL_AGENT_SUMMARY_MODEL=qwen3.7-flash
+FINANCIAL_AGENT_SUMMARY_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+FINANCIAL_AGENT_SUMMARY_TIMEOUT_SECONDS=30
+FINANCIAL_AGENT_SUMMARY_TEMPERATURE=0
 ```
+
+`FINANCIAL_AGENT_CONTEXT_STRATEGY` 默认继续为 `full_history`。只有显式设为 `summary_compression` 且未注入测试/自定义 `SummaryProvider` 时，runtime 才构建 Qwen provider 并要求 `FINANCIAL_AGENT_QWEN_API_KEY`。推荐构建一个共享 Context Manager 注入三组件以复用完整摘要缓存；独立构造仍兼容，但缓存互不共享。
 
 固定 Context Selection Eval 位于 `eval/context/context_cases.jsonl`，包含 12 条至少 8 条 message 的长历史场景，覆盖早期 user ID、否定 Tool 约束、公司指代、日期/证券代码纠正、闲聊中的约束、超长无关最近轮次、显式执行顺序和 user/assistant 确认边界。运行：
 
@@ -296,15 +310,16 @@ FINANCIAL_AGENT_VERIFIER_CONTEXT_BUDGET_TOKENS=4096
 .\.venv\Scripts\python.exe scripts\evaluate_context.py
 ```
 
-默认比较 `full_history`、最近 3 轮的 `last_n` 和 130-token `budgeted_selection`，记录关键上下文保留率、history token 压缩率、Planner plan-sufficiency 等价率、关键实体或用户约束丢失率。Planner 指标使用 `deterministic_required_context` 离线 probe：它判断所选上下文是否仍足以形成与 full-history 等价的计划输入，不调用或冒充真实 Qwen Planner。2026-09-16 的 Phase 5.1 baseline 为：
+默认使用固定 grounded fake summarizer，离线比较 `full_history`、最近 3 轮的 `last_n`、130-token `budgeted_selection` 和 `summary_compression`，记录关键上下文保留率、history token 压缩率、Planner plan-sufficiency 等价率、关键实体或用户约束丢失率。Planner 指标使用 `deterministic_required_context` 离线 probe：它判断所选上下文是否仍足以形成与 full-history 等价的计划输入，不调用或冒充真实 Qwen Planner。summary baseline 要求 retention 与 plan equivalence 均不低于 90%、entity/constraint loss 不高于 10%，且每个 case 的 hard-required facts 100% 保留，否则命令失败。2026-09-16 的 Phase 5.2 baseline 为：
 
 | Strategy | 关键上下文保留率 | history token 压缩率 | Planner 等价率 | 关键实体/约束丢失率 |
 | --- | ---: | ---: | ---: | ---: |
 | full_history | 100.00% | 100.00% | 100.00% | 0.00% |
 | last_n | 43.48% | 61.70% | 33.33% | 55.56% |
 | budgeted_selection | 100.00% | 82.27% | 100.00% | 0.00% |
+| summary_compression | 100.00% | 85.06% | 100.00% | 0.00% |
 
-这里的 token 压缩率沿用 `selected_tokens / original_tokens`，数值越低表示裁剪越多。Eval 只建立离线 baseline，不宣称 budgeted selection 必然优于 full history；后续可用同一组 case 对比 Summary、Summary + Retrieval，并另行运行真实 Planner 消融。
+这里的 token 压缩率沿用 `selected_tokens / original_tokens`，数值越低表示裁剪越多。Eval 只建立离线 baseline，不宣称某种策略必然优于 full history。可选 `scripts\evaluate_context.py --live-summary` 使用真实 Qwen Summary Provider 跑同一组 case；它访问网络，不进入默认 pytest。后续可用同一组 case 继续对比 Summary + Retrieval，并另行运行真实 Planner 消融。
 
 `CompositeToolRegistry` / `merge_registries()` 仅按工具名路由到原有 User、Market、RAG Registry，不修改 Phase 1 `ToolRegistry` 的注册、校验、鉴权、审计或错误行为。完整运行时可通过 `build_agent_tools(settings)` 组合全部 9 个 Tool；对应的行情和 RAG Provider 仍要求环境变量凭证及已构建的 embedding index。
 
@@ -352,7 +367,7 @@ Phase 3.1 在执行图之外新增 `financial_agent.planner`。`StructuredPlanne
 
 `PlanValidator` 不调用模型或 Tool，只保证计划合法可执行。Phase 3.2 的 `bindings` 使用结构化 `{target_parameter, source_task_id, source_path}`；`source_path` 固定从上游 `ToolResult.data` 开始，只允许该 Tool `output_model` 公开 Pydantic 契约中的字段名和非负 list index，不支持 JSONPath 或表达式。因此 Planner 不能读取 `ToolResult.status/error/request_id`，也不能遍历 service/provider 的内部字段。Validator 检查 source task、禁止自身/重复 target、字段白名单、静态类型兼容和包含 binding edge 的 cycle，并把 binding source 自动置为依赖（优先于手写 dependency）。校验成功时转换为现有 Phase 2 `Task`；clarify/no_tool 成功时返回空 Task。旧的 `$t1.result...` 字符串引用会被拒绝。
 
-执行前，Phase 2 dispatcher 在所有上游 dependency 成功后才解析 binding，将真实值写入 arguments，并重新以 Tool input schema 校验；解析失败会产生控制面错误，上游 Tool 失败则下游不会执行。统一入口为 `financial_agent.agent.orchestrator.run_planner_execution(request, planner, validator, registry)`，完整串通 `query/history → Context Manager → Planner → validate/binding compile → graph execution → FinalResult`。第一版只支持标量或完整 list 字段、任意长度的显式 DAG 链；Phase 4.1 已加入 Tool Execution Retry，Phase 4.2 提供独立语义 Verifier，Phase 4.3 加入自动 Rewrite/Replan，Phase 5.1 加入确定性 history budget 和 selection。
+执行前，Phase 2 dispatcher 在所有上游 dependency 成功后才解析 binding，将真实值写入 arguments，并重新以 Tool input schema 校验；解析失败会产生控制面错误，上游 Tool 失败则下游不会执行。统一入口为 `financial_agent.agent.orchestrator.run_planner_execution(request, planner, validator, registry)`，完整串通 `query/history → Context Manager → Planner → validate/binding compile → graph execution → FinalResult`。第一版只支持标量或完整 list 字段、任意长度的显式 DAG 链；Phase 4.1 已加入 Tool Execution Retry，Phase 4.2 提供独立语义 Verifier，Phase 4.3 加入自动 Rewrite/Replan，Phase 5.1 加入确定性 history selection，Phase 5.2 增加显式 grounded summary compression。
 
 固定 Planner Eval Set 位于 `eval/planner/planner_cases.jsonl`，共 40 条独立 JSONL case，不从 prompt、模型输出或源码反推期望。每条都包含 query、完整 history、expected_tools、expected_arguments、expected_dependencies、temporal_expectation、forbidden_tools；可用 `acceptable_plans` 声明多套等价 Tool/参数/依赖 pattern。case 不保存或匹配模型生成的 task ID，依赖只按上游/下游 Tool edge 比较。4 条信息不足或歧义 case 标记为 `abstain`，要求不调用 Tool、不编造参数；它们不进入 executable valid plan rate 的分母。
 
@@ -494,7 +509,7 @@ registry = register_user_tools(UserDataService(
 - 结构化 Result Binding、公开输出字段白名单、运行期结果路径解析和 plan → validate → execute 统一入口。
 - Provider 解耦的 Structured Verifier、严格 PASS/REWRITE/REPLAN schema、确定性 failed_task_ids 和固定 Verifier Eval Set。
 - Verifier 驱动的有界 Agent Loop、证据约束 Answer Writer、完整 Replan、依赖安全结果复用、显式 force rerun 和跨轮 Tool attempt 总预算。
-- Planner、Writer、Verifier 共用的 Context Manager、三种 history 策略、独立 token budget、安全选择指标和可注入 token estimator。
+- Planner、Writer、Verifier 共用的 Context Manager、四种 history 策略、grounded summary、弹性预算、完整摘要 LRU、安全指标和可注入 token estimator/provider。
 - Prompt-independent 的 40 条 Planner Eval Set：单/并行/依赖、三源组合、当前/历史时间、RAG filters、法规、FAQ、无关 Tool 与 abstain 边界，以及六项离线/真实模型通用指标。
 
 ## 已知限制
@@ -508,11 +523,11 @@ registry = register_user_tools(UserDataService(
 - Knowledge retrieval 尚未实现复杂表格解析、精细版本推理、query rewrite、decomposition、HyDE、GraphRAG 或向量数据库。
 - Market Data v0.1 已提供同步 Tushare REST Provider；120 积分下尚无指数、复权、实时行情、分钟线、Level-2、新闻、资金流或指标库。
 - 当前为同步本地访问；审计没有多进程并发保证、轮转或防篡改能力。日志不是通用敏感数据脱敏器。
-- Context budget 只覆盖 history，尚不覆盖 query、tools、plan、Tool Results、draft 或 feedback；不支持 Summary、history retrieval/embedding、长期 Memory、模型精确 tokenizer 或 KV Cache 优化。
+- Context budget 只覆盖 history，尚不覆盖 query、tools、plan、Tool Results、draft 或 feedback；Summary 尚不支持增量合并、跨进程缓存或 retrieval，仍无 history embedding、长期 Memory、模型精确 tokenizer 或 KV Cache 优化。
 - 依赖只有兼容范围，未锁定全部传递依赖；只在当前 Windows 环境验证。
 
 ## 下一步
 
-下一阶段可增加 Summary Compression、完整 prompt/token/cost 预算、循环 trace 持久化、真实 Provider 闭环 Eval，并补充面向用户的 clarify/no_tool 文案。
+下一阶段可增加 Summary + Retrieval、完整 prompt/token/cost 预算、循环 trace 持久化、真实 Provider 闭环 Eval，并补充面向用户的 clarify/no_tool 文案。
 
 后续工程约束：外部模型和数据源必须经 adapter/registry，LangGraph node 不直接依赖 provider SDK；API key 仅由环境配置注入；所有用户数据为 synthetic；每个功能补测试，并同步更新 README 的“当前能力 / 已知限制 / 下一步”。

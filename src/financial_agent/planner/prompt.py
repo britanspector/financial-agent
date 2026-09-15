@@ -10,6 +10,7 @@ from financial_agent.schemas import UserQuery
 from financial_agent.agent.models import Task, TaskExecutionResult
 from financial_agent.agent.result_projection import project_result
 from financial_agent.verifier.models import VerificationResult
+from financial_agent.context.models import HistorySummary
 
 
 PLANNING_RULES = (
@@ -62,6 +63,7 @@ def build_planner_messages(
     tools: list[dict[str, Any]],
     *,
     current_date: date | None = None,
+    history_summary: HistorySummary | None = None,
 ) -> list[dict[str, str]]:
     system = (
         "You are a financial tool planner. Produce a strict JSON Task DAG matching the supplied schema. "
@@ -73,6 +75,9 @@ def build_planner_messages(
         "tools": tools,
         "current_date": (current_date or date.today()).isoformat(),
     }
+    if history_summary is not None:
+        system += " Treat history_summary as grounded compressed history; current query and raw history take precedence."
+        payload["history_summary"] = history_summary.model_dump(mode="json")
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))},
@@ -87,6 +92,7 @@ def build_replanner_messages(
     feedback: VerificationResult,
     *,
     current_date: date | None = None,
+    history_summary: HistorySummary | None = None,
 ) -> list[dict[str, str]]:
     system = (
         "You are a financial tool replanner. Return a strict JSON full replacement Task DAG. "
@@ -104,6 +110,9 @@ def build_replanner_messages(
         "tools": tools,
         "current_date": (current_date or date.today()).isoformat(),
     }
+    if history_summary is not None:
+        system += " Treat history_summary as grounded compressed history; current query and raw history take precedence."
+        payload["history_summary"] = history_summary.model_dump(mode="json")
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))},
