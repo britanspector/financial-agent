@@ -60,6 +60,11 @@ def test_qwen_secret_and_model_defaults(monkeypatch):
     assert settings.context_summary_budget_ratio == 0.4
     assert settings.context_summary_cache_size == 128
     assert settings.context_summary_max_facts == 24
+    assert settings.context_retrieval_top_k == 4
+    assert settings.context_retrieval_min_score == 0.15
+    assert settings.context_retrieval_recent_reservation_ratio == 0.3
+    assert settings.context_retrieval_protected_summary_reservation_ratio == 0.1
+    assert settings.context_retrieval_history_reservation_ratio == 0.1
     assert settings.planner_context_budget_tokens == 4096
     assert settings.answer_context_budget_tokens == 4096
     assert settings.verifier_context_budget_tokens == 4096
@@ -139,6 +144,15 @@ def test_invalid_agent_loop_settings_rejected(monkeypatch, key, value):
     monkeypatch.setenv(f"FINANCIAL_AGENT_{key}", value)
     with pytest.raises(ValidationError):
         Settings()
+
+
+def test_context_retrieval_reservations_cannot_exceed_total_budget():
+    with pytest.raises(ValidationError, match="reservation ratios"):
+        Settings(
+            context_retrieval_recent_reservation_ratio=0.6,
+            context_retrieval_protected_summary_reservation_ratio=0.3,
+            context_retrieval_history_reservation_ratio=0.2,
+        )
 
 
 @pytest.mark.parametrize(("key", "value"), [

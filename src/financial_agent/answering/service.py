@@ -47,6 +47,7 @@ class AnswerWriter:
                 previous_draft=previous_draft,
                 feedback=feedback,
                 history_summary=selection.summary,
+                retrieved_history=selection.retrieved_history,
             ),
             response_schema=answer_response_schema(),
         )

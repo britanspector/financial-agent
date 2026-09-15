@@ -214,6 +214,52 @@ def test_shared_summary_is_sent_separately_to_all_component_prompts():
     assert len(summary_provider.calls) == 1
 
 
+def test_retrieved_history_is_separate_and_score_is_not_sent_to_components():
+    settings = Settings(
+        context_strategy="summary_retrieval",
+        context_summary_recent_n=1,
+        planner_context_budget_tokens=3,
+        answer_context_budget_tokens=3,
+        verifier_context_budget_tokens=3,
+        qwen_api_key=None,
+    )
+    summary_provider = Provider({"facts": [{
+        "category": "planning_fact", "content": "durable preference", "source_message_index": 0,
+    }]})
+    manager = build_context_manager(UnitEstimator(), settings=settings, summary_provider=summary_provider)
+    shared_request = UserQuery(
+        query="cash detail",
+        history=[
+            Message(role="user", content="durable preference"),
+            Message(role="assistant", content="noted"),
+            Message(role="user", content="cash detail"),
+            Message(role="assistant", content="cash answer"),
+            Message(role="user", content="latest"),
+        ],
+    )
+    catalog = Catalog()
+    task, result = inputs()
+    planner_provider = Provider({"decision": "no_tool", "tasks": []})
+    planner, _ = build_planner(settings, catalog, provider=planner_provider, context_manager=manager)
+    planner.plan(shared_request)
+    writer_provider = Provider({
+        "answer": "7", "evidence": [{"task_id": "t1", "source_path": ["value"]}],
+    })
+    writer = build_answer_writer(settings, catalog, provider=writer_provider, context_manager=manager)
+    draft = writer.write(shared_request, [task], [result])
+    verifier_provider = Provider({"decision": "PASS", "reason": "enough", "missing_evidence": []})
+    verifier = build_verifier(settings, catalog, provider=verifier_provider, context_manager=manager)
+    verifier.verify(shared_request, [task], [result], draft)
+
+    for model_provider in (planner_provider, writer_provider, verifier_provider):
+        body = payload(model_provider)
+        assert body["history"] == [{"role": "user", "content": "latest"}]
+        assert body["history_summary"]["facts"][0]["content"] == "durable preference"
+        assert body["retrieved_history"][0]["message_indexes"] == [2, 3]
+        assert "score" not in body["retrieved_history"][0]
+    assert len(summary_provider.calls) == 1
+
+
 def test_runtime_rejects_two_context_extension_points_at_once():
     settings = Settings(qwen_api_key=None)
     provider = Provider({"decision": "no_tool", "tasks": []})

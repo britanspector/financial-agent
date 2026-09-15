@@ -8,10 +8,16 @@ from financial_agent.context.models import (
     ContextSelection,
     ContextStrategy,
     HistorySummary,
+    RetrievedHistoryTurn,
     SummaryFact,
 )
 from financial_agent.context.qwen_summary_provider import QwenSummaryProvider
 from financial_agent.context.summarizer import HistorySummarizer
+from financial_agent.context.retrieval import (
+    HistoryRetriever,
+    LexicalHistoryRetriever,
+    retrieved_history_payload,
+)
 from financial_agent.context.summary_providers import (
     SummaryProvider,
     SummaryProviderError,
@@ -31,8 +37,11 @@ __all__ = [
     "ContextStrategy",
     "HistorySummarizer",
     "HistorySummary",
+    "HistoryRetriever",
     "HeuristicTokenEstimator",
     "QwenSummaryProvider",
+    "LexicalHistoryRetriever",
+    "RetrievedHistoryTurn",
     "SummaryFact",
     "SummaryProvider",
     "SummaryProviderError",
@@ -42,4 +51,5 @@ __all__ = [
     "TokenEstimator",
     "build_context_manager",
     "context_policy_from_settings",
+    "retrieved_history_payload",
 ]

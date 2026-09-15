@@ -10,7 +10,8 @@ from financial_agent.schemas import UserQuery
 from financial_agent.agent.models import Task, TaskExecutionResult
 from financial_agent.agent.result_projection import project_result
 from financial_agent.verifier.models import VerificationResult
-from financial_agent.context.models import HistorySummary
+from financial_agent.context.models import HistorySummary, RetrievedHistoryTurn
+from financial_agent.context.retrieval import retrieved_history_payload
 
 
 PLANNING_RULES = (
@@ -64,6 +65,7 @@ def build_planner_messages(
     *,
     current_date: date | None = None,
     history_summary: HistorySummary | None = None,
+    retrieved_history: list[RetrievedHistoryTurn] | None = None,
 ) -> list[dict[str, str]]:
     system = (
         "You are a financial tool planner. Produce a strict JSON Task DAG matching the supplied schema. "
@@ -76,8 +78,12 @@ def build_planner_messages(
         "current_date": (current_date or date.today()).isoformat(),
     }
     if history_summary is not None:
-        system += " Treat history_summary as grounded compressed history; current query and raw history take precedence."
+        system += " Treat history_summary as grounded stable history."
         payload["history_summary"] = history_summary.model_dump(mode="json")
+    if retrieved_history:
+        payload["retrieved_history"] = retrieved_history_payload(retrieved_history)
+    if history_summary is not None or retrieved_history:
+        system += " Resolve conflicts using current query, raw recent history, retrieved raw history, then history_summary."
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))},
@@ -93,6 +99,7 @@ def build_replanner_messages(
     *,
     current_date: date | None = None,
     history_summary: HistorySummary | None = None,
+    retrieved_history: list[RetrievedHistoryTurn] | None = None,
 ) -> list[dict[str, str]]:
     system = (
         "You are a financial tool replanner. Return a strict JSON full replacement Task DAG. "
@@ -111,8 +118,12 @@ def build_replanner_messages(
         "current_date": (current_date or date.today()).isoformat(),
     }
     if history_summary is not None:
-        system += " Treat history_summary as grounded compressed history; current query and raw history take precedence."
+        system += " Treat history_summary as grounded stable history."
         payload["history_summary"] = history_summary.model_dump(mode="json")
+    if retrieved_history:
+        payload["retrieved_history"] = retrieved_history_payload(retrieved_history)
+    if history_summary is not None or retrieved_history:
+        system += " Resolve conflicts using current query, raw recent history, retrieved raw history, then history_summary."
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))},

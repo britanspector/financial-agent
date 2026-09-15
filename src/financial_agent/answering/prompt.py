@@ -9,7 +9,8 @@ from financial_agent.agent.models import Task, TaskExecutionResult
 from financial_agent.agent.result_projection import project_result
 from financial_agent.schemas import UserQuery
 from financial_agent.verifier.models import DraftAnswer, VerificationResult
-from financial_agent.context.models import HistorySummary
+from financial_agent.context.models import HistorySummary, RetrievedHistoryTurn
+from financial_agent.context.retrieval import retrieved_history_payload
 
 
 def answer_response_schema() -> dict[str, Any]:
@@ -39,6 +40,7 @@ def build_answer_messages(
     previous_draft: DraftAnswer | None = None,
     feedback: VerificationResult | None = None,
     history_summary: HistorySummary | None = None,
+    retrieved_history: list[RetrievedHistoryTurn] | None = None,
 ) -> list[dict[str, str]]:
     rewriting = previous_draft is not None
     system = (
@@ -60,8 +62,12 @@ def build_answer_messages(
         "verifier_feedback": feedback.model_dump(mode="json") if feedback else None,
     }
     if history_summary is not None:
-        system += " Treat history_summary as grounded compressed history; current query and raw history take precedence."
+        system += " Treat history_summary as grounded stable history."
         payload["history_summary"] = history_summary.model_dump(mode="json")
+    if retrieved_history:
+        payload["retrieved_history"] = retrieved_history_payload(retrieved_history)
+    if history_summary is not None or retrieved_history:
+        system += " Resolve conflicts using current query, raw recent history, retrieved raw history, then history_summary."
     serialized = TypeAdapter(Any).dump_python(payload, mode="json")
     return [
         {"role": "system", "content": system},

@@ -82,6 +82,9 @@ def test_summary_preserves_absolute_source_index_and_current_query():
     assert selection.metrics.selected_tokens == 3
     assert selection.metrics.summary_used is True
     assert selection.metrics.summary_fallback_reason is None
+    summary_payload = json.loads(provider.calls[0][0][1]["content"])
+    assert "current_query" not in summary_payload
+    assert "recent_history" not in summary_payload
 
 
 def test_complete_grounded_summary_is_cached_but_packed_per_budget():
@@ -115,22 +118,34 @@ def test_summary_borrows_unused_raw_budget():
     assert selection.metrics.selected_tokens == 5
 
 
-def test_query_change_does_not_hit_summary_cache():
+def test_query_change_hits_stable_summary_cache():
     facts = [{"category": "entity", "content": "syn-user-0001", "source_message_index": 0}]
     provider = Provider(facts)
     manager = ContextManager(FactCostEstimator(), summarizer=HistorySummarizer(provider))
     request = UserQuery(query="first", history=history())
     manager.select(request, "planner", policy())
     manager.select(request.model_copy(update={"query": "second"}), "planner", policy())
-    assert len(provider.calls) == 2
+    assert len(provider.calls) == 1
 
 
-def test_request_id_change_does_not_hit_summary_cache():
+def test_request_id_change_hits_content_addressed_summary_cache():
     facts = [{"category": "entity", "content": "syn-user-0001", "source_message_index": 0}]
     provider = Provider(facts)
     manager = ContextManager(FactCostEstimator(), summarizer=HistorySummarizer(provider))
     manager.select(UserQuery(query="same", history=history()), "planner", policy())
     manager.select(UserQuery(query="same", history=history()), "planner", policy())
+    assert len(provider.calls) == 1
+
+
+def test_summary_prefix_change_misses_content_addressed_cache():
+    facts = [{"category": "entity", "content": "syn-user-0001", "source_message_index": 0}]
+    provider = Provider(facts)
+    manager = ContextManager(FactCostEstimator(), summarizer=HistorySummarizer(provider))
+    request = UserQuery(query="same", history=history())
+    manager.select(request, "planner", policy())
+    changed = request.model_copy(deep=True)
+    changed.history[2] = Message(role="user", content="需要新的组合分析")
+    manager.select(changed, "planner", policy())
     assert len(provider.calls) == 2
 
 
@@ -176,7 +191,7 @@ def test_grounding_rejects_invalid_source_and_non_source_text():
         {"category": "planning_fact", "content": "需要组合分析", "source_message_index": 99},
     ):
         with pytest.raises(InvalidHistorySummaryError):
-            HistorySummarizer(Provider([fact])).summarize("q", indexed, [])
+            HistorySummarizer(Provider([fact])).summarize(indexed)
 
 
 def test_correction_replaces_old_date_and_must_cite_correction_message():
@@ -188,29 +203,50 @@ def test_correction_replaces_old_date_and_must_cite_correction_message():
     valid = Provider([{
         "category": "time_range", "content": "改为 2026-05-01", "source_message_index": 2,
     }])
-    summary = HistorySummarizer(valid).summarize("按更正日期", indexed, [])
+    summary = HistorySummarizer(valid).summarize(indexed)
     assert summary.facts[0].source_message_index == 2
 
     stale = Provider([{
         "category": "time_range", "content": "2026-01-01", "source_message_index": 0,
     }])
     with pytest.raises(ProtectedFactMissingError):
-        HistorySummarizer(stale).summarize("按更正日期", indexed, [])
+        HistorySummarizer(stale).summarize(indexed)
 
 
 def test_recent_raw_correction_supersedes_protected_value_in_summary_prefix():
-    prefix = [
-        (0, Message(role="user", content="日期是 2026-01-01")),
-        (1, Message(role="user", content="需要组合分析")),
+    messages = [
+        Message(role="user", content="日期是 2026-01-01"),
+        Message(role="user", content="需要组合分析"),
+        Message(role="user", content="更正：改为 2026-05-01"),
     ]
-    recent = [(2, Message(role="user", content="更正：改为 2026-05-01"))]
-    provider = Provider([{
-        "category": "planning_fact", "content": "需要组合分析", "source_message_index": 1,
-    }])
+    provider = Provider([
+        {"category": "time_range", "content": "2026-01-01", "source_message_index": 0},
+        {"category": "planning_fact", "content": "需要组合分析", "source_message_index": 1},
+    ])
+    manager = ContextManager(FactCostEstimator(), summarizer=HistorySummarizer(provider))
 
-    summary = HistorySummarizer(provider).summarize("继续", prefix, recent)
+    selection = manager.select(UserQuery(query="继续", history=messages), "planner", policy(2))
 
-    assert [fact.content for fact in summary.facts] == ["需要组合分析"]
+    assert [fact.content for fact in selection.summary.facts] == ["需要组合分析"]
+
+
+def test_recent_explicit_constraint_reversal_filters_old_stable_fact():
+    messages = [
+        Message(role="user", content="不要查询行情"),
+        Message(role="assistant", content="明白"),
+        Message(role="user", content="需要组合分析"),
+        Message(role="assistant", content="可以"),
+        Message(role="user", content="更正：现在可以查询行情"),
+    ]
+    provider = Provider([
+        {"category": "constraint", "content": "不要查询行情", "source_message_index": 0},
+        {"category": "planning_fact", "content": "需要组合分析", "source_message_index": 2},
+    ])
+    manager = ContextManager(FactCostEstimator(), summarizer=HistorySummarizer(provider))
+
+    selection = manager.select(UserQuery(query="继续", history=messages), "planner", policy(2))
+
+    assert [fact.content for fact in selection.summary.facts] == ["需要组合分析"]
 
 
 def test_provider_error_falls_back_and_is_classified():

@@ -44,7 +44,10 @@ class StructuredPlanner:
         response_schema = _tool_aware_response_schema(self._catalog.describe())
         payload = self._provider.generate(
             build_planner_messages(
-                contextual_request, self._catalog.describe(), history_summary=selection.summary,
+                contextual_request,
+                self._catalog.describe(),
+                history_summary=selection.summary,
+                retrieved_history=selection.retrieved_history,
             ),
             response_schema=response_schema,
         )
@@ -66,6 +69,7 @@ class StructuredPlanner:
             build_replanner_messages(
                 contextual_request, tools, previous_plan, tool_results, feedback,
                 history_summary=selection.summary,
+                retrieved_history=selection.retrieved_history,
             ),
             response_schema=_replan_response_schema(tools),
         )

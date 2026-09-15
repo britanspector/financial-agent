@@ -23,6 +23,11 @@ _CONSTRAINT = re.compile(
     r"\bmust\b|\bonly\b|\bdo\s+not\b|\bdon't\b",
     re.IGNORECASE,
 )
+_CONSTRAINT_REVERSAL = re.compile(
+    r"取消(?:之前|原来)?.{0,12}(?:限制|要求)|不再(?:要求|限制)|更正.{0,20}(?:可以|允许)",
+    re.IGNORECASE,
+)
+_TERM = re.compile(r"[a-z0-9]+(?:[._-][a-z0-9]+)*|[\u4e00-\u9fff]+", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -45,14 +50,17 @@ class HistorySummarizer:
         self._provider = provider
         self._max_facts = max_facts
 
+    @property
+    def cache_discriminator(self) -> str:
+        from financial_agent.context.summary_prompt import SUMMARY_SCHEMA_VERSION
+        return f"{SUMMARY_SCHEMA_VERSION}:{self._max_facts}"
+
     def summarize(
         self,
-        query: str,
         summarized_messages: Sequence[tuple[int, Message]],
-        recent_messages: Sequence[tuple[int, Message]],
     ) -> HistorySummary:
         raw = self._provider.generate(
-            build_summary_messages(query, summarized_messages, recent_messages),
+            build_summary_messages(summarized_messages),
             response_schema=summary_response_schema(self._max_facts),
         )
         try:
@@ -64,11 +72,9 @@ class HistorySummarizer:
             source = by_index.get(fact.source_message_index)
             if source is None or fact.content not in source.content:
                 raise InvalidHistorySummaryError("Summary fact is not grounded in its source message")
-        summarized_indexes = {index for index, _ in summarized_messages}
-        protected = extract_protected_facts([*summarized_messages, *recent_messages])
         missing = [
-            fact for fact in protected
-            if fact.source_message_index in summarized_indexes and not _covered(fact, summary)
+            fact for fact in extract_protected_facts(summarized_messages)
+            if not _covered(fact, summary)
         ]
         if missing:
             raise ProtectedFactMissingError("Summary omitted protected history facts")
@@ -93,7 +99,14 @@ def extract_protected_facts(messages: Sequence[tuple[int, Message]]) -> list[Pro
             by_category[category].extend(ProtectedFact(category, value, index) for value in values)
         for clause in re.split(r"[。！？；;\n]", message.content):
             clause = clause.strip()
-            if clause and _CONSTRAINT.search(clause):
+            if clause and _CONSTRAINT_REVERSAL.search(clause):
+                correction_terms = _terms(clause)
+                by_category["constraint"] = [
+                    fact for fact in by_category["constraint"]
+                    if not (_terms(fact.value) & correction_terms)
+                ]
+                by_category["constraint"].append(ProtectedFact("constraint", clause, index))
+            elif clause and _CONSTRAINT.search(clause):
                 by_category["constraint"].append(ProtectedFact("constraint", clause, index))
     result: list[ProtectedFact] = []
     seen: set[tuple[str, str, int]] = set()
@@ -104,6 +117,17 @@ def extract_protected_facts(messages: Sequence[tuple[int, Message]]) -> list[Pro
                 seen.add(key)
                 result.append(fact)
     return result
+
+
+def _terms(text: str) -> set[str]:
+    terms: set[str] = set()
+    for match in _TERM.finditer(text.casefold()):
+        value = match.group(0)
+        if "\u4e00" <= value[0] <= "\u9fff" and len(value) > 1:
+            terms.update(value[index:index + 2] for index in range(len(value) - 1))
+        else:
+            terms.add(value)
+    return terms
 
 
 def _covered(protected: ProtectedFact, summary: HistorySummary) -> bool:

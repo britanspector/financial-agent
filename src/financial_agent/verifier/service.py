@@ -66,6 +66,7 @@ class StructuredVerifier:
                 resolved_evidence=resolved_evidence,
                 failed_task_ids=failed_task_ids,
                 history_summary=selection.summary,
+                retrieved_history=selection.retrieved_history,
             ),
             response_schema=verifier_response_schema(),
         )

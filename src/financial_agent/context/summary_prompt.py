@@ -9,7 +9,7 @@ from typing import Any
 from financial_agent.schemas import Message
 
 
-SUMMARY_SCHEMA_VERSION = "phase5.2-v1"
+SUMMARY_SCHEMA_VERSION = "phase5.3-stable-v1"
 
 
 def summary_response_schema(max_facts: int) -> dict[str, Any]:
@@ -39,9 +39,7 @@ def summary_response_schema(max_facts: int) -> dict[str, Any]:
 
 
 def build_summary_messages(
-    query: str,
     summarized_messages: Sequence[tuple[int, Message]],
-    recent_messages: Sequence[tuple[int, Message]],
 ) -> list[dict[str, str]]:
     system = (
         "You extract grounded facts from old conversation history. Return strict JSON. "
@@ -49,19 +47,13 @@ def build_summary_messages(
         "Preserve user IDs, stock symbols, and dates byte-for-byte. Keep user constraints, corrected final values, "
         "confirmed intent, and facts needed for later planning; omit greetings, repetition, and ordinary assistant "
         "acknowledgements. A later correction replaces an older value and must cite the correction message. "
-        "Summarize only summarized_history; recent_history is context for relevance and conflict resolution. "
-        "Priority is current_query, then recent_history, then summarized_history."
+        "Summarize durable facts from summarized_history without adapting them to any current query."
     )
     payload = {
         "schema_version": SUMMARY_SCHEMA_VERSION,
-        "current_query": query,
         "summarized_history": [
             {"index": index, **message.model_dump(mode="json")}
             for index, message in summarized_messages
-        ],
-        "recent_history": [
-            {"index": index, **message.model_dump(mode="json")}
-            for index, message in recent_messages
         ],
     }
     return [
