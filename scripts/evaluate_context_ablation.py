@@ -14,7 +14,12 @@ if str(ROOT / "src") not in sys.path:
 
 from financial_agent.answering.qwen_provider import QwenAnswerProvider
 from financial_agent.config import Settings
-from financial_agent.context.ablation import evaluate_context_ablation, load_ablation_cases
+from financial_agent.context.ablation import (
+    AblationReport,
+    evaluate_context_ablation,
+    load_ablation_cases,
+    rescore_ablation_report,
+)
 from financial_agent.context.qwen_summary_provider import QwenSummaryProvider
 from financial_agent.planner.qwen_provider import QwenPlannerProvider
 from financial_agent.verifier.qwen_provider import QwenVerifierProvider
@@ -35,10 +40,31 @@ def main() -> None:
     parser.add_argument("--budget-tokens", type=int, default=160)
     parser.add_argument("--last-n", type=int, default=3)
     parser.add_argument("--json-report", type=Path)
+    parser.add_argument(
+        "--rescore-report", type=Path,
+        help="Recompute strict/semantic Planner scores from persisted actual arguments without model calls",
+    )
     args = parser.parse_args()
     path = ROOT / "eval" / "context_ablation" / "holdout_cases.jsonl"
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     cases = load_ablation_cases(path)
+    if args.rescore_report:
+        existing = AblationReport.model_validate_json(
+            args.rescore_report.read_text(encoding="utf-8")
+        )
+        selected_ids = {run.case_id for run in existing.runs}
+        report = rescore_ablation_report(
+            existing, [case for case in cases if case.case_id in selected_ids],
+        )
+        destination = args.json_report or args.rescore_report
+        destination.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+        print(json.dumps({
+            "mode": report.mode,
+            "case_count": report.case_count,
+            "rescored_without_model_calls": True,
+            "strategies": [item.model_dump(mode="json") for item in report.strategies],
+        }, ensure_ascii=False, indent=2))
+        return
     factories = None
     mode = "live" if args.live else "offline"
     if args.live:

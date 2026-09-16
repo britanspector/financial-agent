@@ -341,9 +341,13 @@ Phase 5.4 的 12 条 holdout 与上述 15 条开发集分离，并以 SHA-256 `8
 .\.venv\Scripts\python.exe scripts\evaluate_context_ablation.py --json-report reports\phase5_context_ablation_offline.json
 # 固定五条 case 的真实 Qwen slice；访问网络，不进入默认 pytest
 .\.venv\Scripts\python.exe scripts\evaluate_context_ablation.py --live --json-report reports\phase5_context_ablation_live.json
+# 使用报告中已保存的 actual arguments 离线重算 strict / semantic Planner score
+.\.venv\Scripts\python.exe scripts\evaluate_context_ablation.py --rescore-report reports\phase5_context_ablation_live.json
 ```
 
-2026-09-16 离线 deterministic holdout 的实现硬门禁全部通过：所有 budgeted/summary 策略未超预算，Summary 两策略 protected retention 100%，grounding、增量失败 rebuild 与既有回归由单元测试覆盖。Summary + Retrieval 的 Task/Planner accuracy 为 100%/100%，Last-N 为 0%/0%；其 history token ratio 为 93.32%，summary prefix stability 为 72.73%，增量摘要输入估算 1,181 tokens，对照每次完整 rebuild 为 1,189 tokens。`token ratio <= 0.60` 未达到，作为实验结果保留而不调整 holdout 或阻止提交。真实 Qwen slice 使用仍有额度的 `qwen3.7-flash-2026-07-15` 完成 5×5 运行并通过实现硬门禁：无 Provider/schema failure，Summary 两策略 protected retention 100%，Summary + Retrieval critical retention 100%、token ratio 87.10%、prefix stability 81.16%。当前 synthetic live Tool 的开放 `topic` 字段会被模型生成语义等价中文值，而评分器要求固定英文 canonical value，因此五种策略 exact Task/Planner accuracy 均为 0；该结果说明 live harness 的业务语义评分尚需独立校准，不能解释为 Context 效果失败。
+2026-09-16 离线 deterministic holdout 的实现硬门禁全部通过：所有 budgeted/summary 策略未超预算，Summary 两策略 protected retention 100%，grounding、增量失败 rebuild 与既有回归由单元测试覆盖。Summary + Retrieval 的 Task/Planner accuracy 为 100%/100%，Last-N 为 0%/0%；其 history token ratio 为 93.32%，summary prefix stability 为 72.73%，增量摘要输入估算 1,181 tokens，对照每次完整 rebuild 为 1,189 tokens。`token ratio <= 0.60` 未达到，作为实验结果保留而不调整 holdout 或阻止提交。
+
+Live scorer 同时报告 strict 与 semantic Planner accuracy。Strict 对完整参数对象逐字段精确比较；semantic 只对显式开放的 `topic` / `constraint` 使用有限 canonical alias，`entity`、日期、空值、键集合及其他结构仍严格比较。报告保存 synthetic actual tool/arguments，后续可不调用模型直接重算。当前固定 live 输出离线重算结果为：Full History strict/semantic `0%/40%`、Last-N `0%/0%`、Budgeted Selection `0%/20%`、Summary + Recent `0%/20%`、Summary + Retrieval `0%/40%`。本轮模型执行另有一条 Writer response failure 和一条 Verifier timeout；它们保留在 hard-gate failure 中，不通过修改 Context 参数或 holdout 隐藏。
 
 `CompositeToolRegistry` / `merge_registries()` 仅按工具名路由到原有 User、Market、RAG Registry，不修改 Phase 1 `ToolRegistry` 的注册、校验、鉴权、审计或错误行为。完整运行时可通过 `build_agent_tools(settings)` 组合全部 9 个 Tool；对应的行情和 RAG Provider 仍要求环境变量凭证及已构建的 embedding index。
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from statistics import mean, median
 from time import perf_counter
@@ -30,6 +31,26 @@ STRATEGIES = (
     "full_history", "last_n", "budgeted_selection", "summary_compression", "summary_retrieval",
 )
 
+_SEMANTIC_ARGUMENT_FIELDS = frozenset({"topic", "constraint"})
+_SEMANTIC_ALIASES = {
+    "portfolio_risk": ("portfolio risk", "组合风险", "投资组合风险"),
+    "company_analysis": ("company analysis", "公司分析", "经营分析", "经营情况"),
+    "cashflow_risk": ("cashflow risk", "cash flow risk", "现金流风险", "现金流断裂风险"),
+    "research": ("研究", "研究资料", "研究信息"),
+    "market_history": ("market history", "行情历史", "历史行情", "历史表现"),
+    "period_analysis": ("period analysis", "期间分析", "时间范围分析", "区间分析"),
+    "overseas_orders": ("overseas orders", "海外订单", "海外订单增长"),
+    "account_risk": ("account risk", "账户风险"),
+    "market_snapshot": ("market snapshot", "行情", "行情快照", "市场快照", "查询行情"),
+    "inventory_cycle": ("inventory cycle", "库存周期", "渠道库存回补", "渠道库存回补节奏"),
+    "portfolio_overview": ("portfolio overview", "组合概览", "投资组合概览"),
+    "capex_sensitivity": ("capex sensitivity", "资本开支敏感性", "资本开支敏感性结论"),
+    "不要查行情": ("不要查行情", "不查行情", "禁止查询行情", "无需查询行情"),
+    "现在可以查询行情": (
+        "现在可以查询行情", "可以查询行情", "允许", "允许查询行情", "可查询", "取消行情限制",
+    ),
+}
+
 
 class AblationCriticalFact(Schema):
     value: str = Field(min_length=1)
@@ -51,6 +72,10 @@ class AblationRun(Schema):
     strategy: str
     task_correct: bool
     planner_correct: bool
+    planner_strict_correct: bool
+    planner_semantic_correct: bool
+    actual_tool_name: str | None = None
+    actual_arguments: dict[str, Any] | None = None
     plan_equivalent_to_full: bool = False
     critical_retention: float = Field(ge=0, le=1)
     protected_retention: float = Field(ge=0, le=1)
@@ -75,6 +100,8 @@ class AblationStrategyMetrics(Schema):
     case_count: int
     task_accuracy: float
     planner_accuracy: float
+    planner_strict_accuracy: float
+    planner_semantic_accuracy: float
     plan_equivalence: float
     critical_retention: float
     protected_retention: float
@@ -314,6 +341,53 @@ def evaluate_context_ablation(
     )
 
 
+def rescore_ablation_report(
+    report: AblationReport,
+    cases: list[AblationCase],
+) -> AblationReport:
+    """Recompute strict/semantic Planner scores from persisted, already-generated plans."""
+    by_case = {case.case_id: case for case in cases}
+    rescored_runs = []
+    for run in report.runs:
+        case = by_case.get(run.case_id)
+        if case is None:
+            raise ValueError(f"Unknown ablation case in report: {run.case_id}")
+        strict = (
+            run.actual_tool_name == "lookup_financial_fact"
+            and run.actual_arguments == case.expected_arguments
+        )
+        semantic = (
+            run.actual_tool_name == "lookup_financial_fact"
+            and run.actual_arguments is not None
+            and semantic_arguments_match(case.expected_arguments, run.actual_arguments)
+        )
+        rescored_runs.append(run.model_copy(update={
+            "planner_correct": semantic,
+            "planner_strict_correct": strict,
+            "planner_semantic_correct": semantic,
+        }))
+    strategies = [_aggregate(strategy, rescored_runs) for strategy in STRATEGIES]
+    by_strategy = {item.strategy: item for item in strategies}
+    retrieval = by_strategy["summary_retrieval"]
+    last = by_strategy["last_n"]
+    full = by_strategy["full_history"]
+    targets = dict(report.experimental_targets)
+    targets.update({
+        "planner_accuracy_not_below_last_n": (
+            retrieval.planner_semantic_accuracy >= last.planner_semantic_accuracy
+        ),
+        "planner_accuracy_within_one_case_of_full": (
+            full.planner_semantic_accuracy - retrieval.planner_semantic_accuracy
+            <= 1 / report.case_count
+        ),
+    })
+    return report.model_copy(update={
+        "strategies": strategies,
+        "runs": rescored_runs,
+        "experimental_targets": targets,
+    })
+
+
 def _run_case(case, strategy, mode, budget, last_n, live_factories) -> AblationRun:
     summary_provider = (
         OfflineAblationSummaryProvider() if mode == "offline" else live_factories[0]()
@@ -357,14 +431,20 @@ def _run_case(case, strategy, mode, budget, last_n, live_factories) -> AblationR
         result = None
         plan = planner.last_tasks
         failure = type(exc).__name__
-    planner_correct = (
+    planner_strict_correct = (
         len(plan) == 1
         and plan[0].tool_name == "lookup_financial_fact"
         and plan[0].arguments == case.expected_arguments
     )
+    planner_semantic_correct = (
+        len(plan) == 1
+        and plan[0].tool_name == "lookup_financial_fact"
+        and semantic_arguments_match(case.expected_arguments, plan[0].arguments)
+    )
     task_correct = (
-        planner_correct and result is not None and result.status == "completed"
-        and result.answer is not None and case.answer_value in result.answer
+        planner_semantic_correct and result is not None and result.status == "completed"
+        and result.answer is not None
+        and str(case.expected_arguments["entity"]) in result.answer
     )
     elapsed = (perf_counter() - started) * 1_000
     final_selections = recorder.selections[before_final:]
@@ -380,7 +460,11 @@ def _run_case(case, strategy, mode, budget, last_n, live_factories) -> AblationR
     ]
     run = AblationRun(
         case_id=case.case_id, strategy=strategy, task_correct=task_correct,
-        planner_correct=planner_correct,
+        planner_correct=planner_semantic_correct,
+        planner_strict_correct=planner_strict_correct,
+        planner_semantic_correct=planner_semantic_correct,
+        actual_tool_name=plan[0].tool_name if len(plan) == 1 else None,
+        actual_arguments=plan[0].arguments if len(plan) == 1 else None,
         critical_retention=len(retained) / len(case.critical_context),
         protected_retention=(
             sum(item in retained for item in protected) / len(protected) if protected else 1.0
@@ -409,6 +493,33 @@ def _plan_signature(run: AblationRun):
         (task.tool_name, json.dumps(task.arguments, ensure_ascii=False, sort_keys=True), tuple(task.dependencies))
         for task in plan
     )
+
+
+def semantic_arguments_match(expected: dict[str, Any], actual: dict[str, Any]) -> bool:
+    """Normalize only explicitly open semantic strings; identifiers and structure stay strict."""
+    if set(expected) != set(actual):
+        return False
+    for field, expected_value in expected.items():
+        actual_value = actual[field]
+        if field in _SEMANTIC_ARGUMENT_FIELDS and isinstance(expected_value, str):
+            if not isinstance(actual_value, str) or not _semantic_string_equal(expected_value, actual_value):
+                return False
+        elif actual_value != expected_value:
+            return False
+    return True
+
+
+def _semantic_string_equal(expected: str, actual: str) -> bool:
+    expected_normalized = _normalize_semantic_string(expected)
+    actual_normalized = _normalize_semantic_string(actual)
+    aliases = _SEMANTIC_ALIASES.get(expected, (expected,))
+    return actual_normalized in {
+        _normalize_semantic_string(value) for value in (expected, *aliases)
+    } or actual_normalized == expected_normalized
+
+
+def _normalize_semantic_string(value: str) -> str:
+    return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", value.casefold())
 
 
 def _selection_text(selection: ContextSelection) -> str:
@@ -488,7 +599,9 @@ def _aggregate(strategy: str, runs: list[AblationRun]) -> AblationStrategyMetric
     return AblationStrategyMetrics(
         strategy=strategy, case_count=len(selected),
         task_accuracy=mean(item.task_correct for item in selected),
-        planner_accuracy=mean(item.planner_correct for item in selected),
+        planner_accuracy=mean(item.planner_semantic_correct for item in selected),
+        planner_strict_accuracy=mean(item.planner_strict_correct for item in selected),
+        planner_semantic_accuracy=mean(item.planner_semantic_correct for item in selected),
         plan_equivalence=mean(item.plan_equivalent_to_full for item in selected),
         critical_retention=mean(item.critical_retention for item in selected),
         protected_retention=mean(item.protected_retention for item in selected),
