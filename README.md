@@ -2,7 +2,7 @@
 
 用于深度学习和求职展示的本地多工具 Agent 工程探索。全部用户数据为 synthetic，不连接真实公司内部系统。
 
-**当前阶段：Phase 6.2 已完成。** 在完全离线、确定性的 Agent E2E Eval Harness 之上，项目新增了版本化、强类型、run-scoped Unified Agent Trace；它统一审计 Context、Plan/Replan、Tool attempt/retry/reuse、Writer、Verifier、Loop iteration、budget 与最终停止原因，同时保持普通 Agent 行为和默认 no-op tracing 不变。
+**当前阶段：Phase 6.3 已完成。** 项目在 Phase 6.1 E2E Harness 与 Phase 6.2 Unified Agent Trace 之上新增 Control Plane Ablation，以同一固定 case 集比较 Simple Baseline、Retry、Verifier/Rewrite、Replan 和 Full Agent，并从强类型 Trace 对恢复机制做逐 case 归因。
 
 ## 项目结构与依赖
 
@@ -29,6 +29,7 @@ financial-agent/
 ├── eval/planner/                # 与 prompt/source 解耦的固定 Planner Eval JSONL
 ├── eval/loop/                   # 15 条离线闭环黑盒验收场景
 ├── eval/agent_e2e/              # 12 条 Phase 6.1 全链路固定场景与独立评分 gold
+├── eval/control_plane_ablation/ # Phase 6.3 专属 case、counterfactual fixture 与 combined manifest
 ├── eval/context/                # 15 条 Phase 5.3 Context Selection baseline
 ├── eval/context_ablation/       # 12 条只用于 Phase 5.4 验收的固定 holdout
 └── data/
@@ -295,6 +296,20 @@ traced = run_agent_loop_traced(
 
 首版仅提供进程内线程安全的本地完整-run JSONL，不提供事件流、跨进程锁、rotation、远程上传、dashboard 或默认 retention。Trace 是后续 ablation 的可审计输入，不替代应用日志。
 
+## Control Plane Ablation
+
+Phase 6.3 使用 12 条未修改的 Phase 6.1 case 加 4 条机制专属 case，组成 hash 锁定的 16-case combined dataset。五种配置分别启用 Retry、Verifier/Rewrite、Replan 和 Context history；前四种配置通过 eval-only `NoHistoryContextAdapter` 明确清空 history，仅保留 current query，Full Agent 使用 case 原始 Context policy。关闭能力只使用固定 policy 开关或 pass-through verifier，不修改生产 Agent 算法、prompt、Settings 或 Full 参数。
+
+四条专属 case 的 Recovery Rate 固定形成 `0 → 0.25 → 0.5 → 0.75 → 1.0`。Retry、Rewrite、Replan 和 Context attribution 分别要求对应的 typed Trace event 序列以及相邻配置的失败→成功转换；不解析自由文本 reason。`trace_health` 独立于 Agent `run_failure_type`，Trace 降级不会覆盖 tool budget、deadline 或 incorrect answer 等真实执行原因。
+
+Context 成本指标命名为 `total_selected_history_tokens`，表示一次 run 中 planner、writer、verifier 所有 Context selection 的 selected history token 累计值，并同时报告三组件 breakdown。Latency 的 mean/p50/p95 是当前机器上的 small-sample descriptive metric，不用于效果结论或 hard gate。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_control_plane_ablation.py
+.\.venv\Scripts\python.exe scripts\evaluate_control_plane_ablation.py --json-report reports/phase63_ablation.json
+.\.venv\Scripts\python.exe scripts\evaluate_control_plane_ablation.py --trace-jsonl reports/phase63_ablation_traces.jsonl
+```
+
 ## Context Manager
 
 Phase 5 为 Planner、Answer Writer 和 Verifier 增加了同一个历史入口。它不会修改当前问题或原请求，只决定哪些历史消息、摘要和检索结果进入 prompt。五种策略分别是：完整历史、最近 N 轮、按预算选择、摘要加最近对话、摘要加检索加最近对话。默认 `full_history` 保持 Phase 4 兼容。
@@ -558,6 +573,7 @@ registry = register_user_tools(UserDataService(
 - Phase 5（2026-09-16）：Context Manager、增量稳定摘要、本地历史检索和独立 holdout ablation 完成；离线硬门禁通过，live 报告按 Full History 基线区分 Context regression、baseline failure 和 infra failure。
 - Phase 6.1（2026-09-16）：369 个默认测试和 2 个 integration tests 通过；12/12 固定 Agent E2E 场景通过。Task Success、Final Answer Correctness 和 Replan Recovery 均为 1.0000，Tool Selection Accuracy 为 0.9167，Unnecessary Tool Call Rate 为 0.0556，Average Tool Attempts 为 1.8333，Loop Iterations 为 1.3333。
 - Phase 6.2（2026-09-16）：382 个默认测试和 2 个 integration tests 通过；新增 safe/evaluation 双 capture mode、强类型 `AgentTrace`、统一 projection/sanitization、失败隔离的 recorder 与本地 JSONL round-trip；Phase 6.1 scorer 已迁移到 Unified Trace，固定指标口径与 gold 未改变。
+- Phase 6.3（2026-09-16）：392 个默认测试和 2 个 integration tests 通过；16 个 case 在 5 种配置下形成 80 个完整 Trace，Full Agent 保持 Phase 6.1 原 12 条全部兼容，四项机制 attribution 与 Recovery staircase 通过。
 - 覆盖四个业务 Tool、FastAPI endpoint、Async HTTP Client、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
 - Market Data 测试使用 `httpx.MockTransport`，不访问 live provider；live smoke test 使用 `pytest -m live` 单独运行。
 
@@ -580,6 +596,7 @@ registry = register_user_tools(UserDataService(
 - Planner、Writer、Verifier 共用的 Context Manager、五种 history 策略、Incremental Stable Summary、本地 BM25 history retrieval、弹性预算、安全指标及可注入 estimator/provider/retriever。
 - 完全离线的 Agent E2E Eval Harness：真实 9 Tool 契约、全链路 Retry/Replan/Rewrite/Binding/Context、结构化答案与证据评分，以及七项固定聚合指标。
 - 版本化 Unified Agent Trace：强类型事件、跨并行 Tool 的真实发生序列、单 Task attempt/retry 关联、loop-level budget、safe/evaluation projection、失败隔离和显式本地 JSONL sink。
+- 五配置 Control Plane Ablation：固定 combined manifest、机制专属 recovery case、Trace-backed attribution、独立 trace health/failure taxonomy，以及 Tool/Loop/Context token/latency 成本比较。
 - Prompt-independent 的 40 条 Planner Eval Set：单/并行/依赖、三源组合、当前/历史时间、RAG filters、法规、FAQ、无关 Tool 与 abstain 边界，以及六项离线/真实模型通用指标。
 
 ## 已知限制
@@ -596,10 +613,11 @@ registry = register_user_tools(UserDataService(
 - Context budget 只覆盖 history，尚不覆盖 query、tools、plan、Tool Results、draft 或 feedback；history retrieval 仍无 embedding/reranker，Summary 增量更新只支持 additions/replacements 且不跨进程持久化；`summary_prefix_stability_ratio` 不是 Provider cache hit 指标，也不提供长期 Memory、精确 tokenizer 或 KV Cache 优化。
 - Phase 6.1/6.2 使用确定性 replay provider 和 synthetic Service/Provider fixture，只证明链路、预算语义、trace 完整性与 scorer 可复现；不代表真实模型生产准确率。
 - Unified Trace 首版没有 event streaming、跨进程文件锁、rotation、远程平台、dashboard 或生产级 retention；safe HMAC 只保证 run 内关联，不支持跨 run 用户追踪。
+- Phase 6.3 latency 来自单机小样本离线运行，只能描述当前 run，不用于声称生产性能、统计显著性或配置优劣。
 - 依赖只有兼容范围，未锁定全部传递依赖；只在当前 Windows 环境验证。
 
 ## 下一步
 
-Phase 6.2 已结束。Phase 6.3 可直接以强类型 Unified Trace 实施 Agent ablation、失败归因与分层指标；真实模型 benchmark 仍应作为独立 live gate。长期 Memory、跨会话持久化和 Agentic RL 仍不在当前范围内。
+Phase 6.3 已结束。下一阶段可基于同一 Trace/report schema 增加真实模型 benchmark、分层失败分析和重复运行统计，但应继续作为独立 live gate。长期 Memory、跨会话持久化和 Agentic RL 仍不在当前范围内。
 
 后续工程约束：外部模型和数据源必须经 adapter/registry，LangGraph node 不直接依赖 provider SDK；API key 仅由环境配置注入；所有用户数据为 synthetic；每个功能补测试，并同步更新 README 的“当前能力 / 已知限制 / 下一步”。
