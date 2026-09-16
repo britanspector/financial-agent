@@ -2,7 +2,7 @@
 
 用于深度学习和求职展示的本地多工具 Agent 工程探索。全部用户数据为 synthetic，不连接真实公司内部系统。
 
-**当前阶段：Phase 5.4 Context Manager 收尾完成。** Planner、Answer Writer 和 Verifier 统一获取受预算控制的历史；显式策略可组合 incremental stable summary、recent raw turns 和本地 BM25 history retrieval。默认仍为 `full_history`，Phase 4.3 的有界 Rewrite/Replan 闭环保持不变。
+**当前阶段：Phase 5 已完成。** 项目现在用统一的 Context Manager 为 Planner、Answer Writer 和 Verifier 控制历史长度，并支持“最近对话 + 稳定摘要 + 相关历史检索”。默认仍使用兼容旧行为的 `full_history`；需要摘要或检索时必须显式开启。
 
 ## 项目结构与依赖
 
@@ -262,7 +262,7 @@ Answer Writer 由 `FINANCIAL_AGENT_ANSWER_MODEL`、`FINANCIAL_AGENT_ANSWER_BASE_
 
 ## Context Manager
 
-Phase 5.1 新增 `financial_agent.context.ContextManager`，Phase 5.2/5.3 增加显式 `summary_compression` 与 `summary_retrieval`，Phase 5.4 完成 incremental stable summary 与独立 holdout ablation。Planner、Answer Writer 和 Verifier 在构造原有 prompt 前均通过该接口选择历史；`query` 和 `request_id` 原样保留，原请求不会被修改。默认 `full_history` 与 Phase 4 行为兼容，`last_n` 按完整轮次保留最近 N 轮，`budgeted_selection` 在各组件独立 budget 内确定性选择完整轮次。
+Phase 5 为 Planner、Answer Writer 和 Verifier 增加了同一个历史入口。它不会修改当前问题或原请求，只决定哪些历史消息、摘要和检索结果进入 prompt。五种策略分别是：完整历史、最近 N 轮、按预算选择、摘要加最近对话、摘要加检索加最近对话。默认 `full_history` 保持 Phase 4 兼容。
 
 `budgeted_selection` 优先尝试最新一轮；如果该轮本身超预算，会跳过并继续选择其他能装入预算的候选。其余候选综合 recency、与当前 query 的 lexical overlap、明确的 user ID / A 股证券代码 / 日期实体重叠，以及 user role 中的约束、纠正和确认语义排序。中文相关性使用固定 bigram，不把简单正则当作通用公司/机构 NER；公司和机构名称主要依赖 lexical overlap。assistant 的普通“收到/已确认”不会获得约束确认加权。选择以完整轮次为单位，不截断消息；只有 current query 无条件完整保留。
 
@@ -347,11 +347,9 @@ Phase 5.4 的 12 条 holdout 与上述 15 条开发集分离，并以 SHA-256 `8
 
 2026-09-16 离线 deterministic holdout 的实现硬门禁全部通过：所有 budgeted/summary 策略未超预算，Summary 两策略 protected retention 100%，grounding、增量失败 rebuild 与既有回归由单元测试覆盖。Summary + Retrieval 的 Task/Planner accuracy 为 100%/100%，Last-N 为 0%/0%；其 history token ratio 为 93.32%，summary prefix stability 为 72.73%，增量摘要输入估算 1,181 tokens，对照每次完整 rebuild 为 1,189 tokens。`token ratio <= 0.60` 未达到，作为实验结果保留而不调整 holdout 或阻止提交。
 
-Live scorer 同时报告 strict 与 semantic Planner accuracy。Strict 对完整参数对象逐字段精确比较；semantic 只对显式开放的 `topic` / `constraint` 使用有限 canonical alias，`entity`、日期、空值、键集合及其他结构仍严格比较。报告保存 synthetic actual tool/arguments，后续可不调用模型直接重算。当前固定 live 输出离线重算结果为：Full History strict/semantic `0%/40%`、Last-N `0%/0%`、Budgeted Selection `0%/20%`、Summary + Recent `0%/20%`、Summary + Retrieval `0%/40%`。本轮模型执行另有一条 Writer response failure 和一条 Verifier timeout；它们保留在 hard-gate failure 中，不通过修改 Context 参数或 holdout 隐藏。
+Live 报告同时给出严格分数和语义等价分数，并逐 case 与 Full History 比较。实体、日期和参数结构仍严格匹配；只有开放文本字段使用有限的同义映射。最终结果很简单：Full History Planner 正确的 2 条 case 中，Summary + Retrieval 保留了 2 条，Last-N 保留了 0 条；Summary + Retrieval 没有新增 Planner regression，并保持 100% 的关键上下文和 protected facts。
 
-相对 Full History 的逐 case 分析将 Planner 与最终 Task 分开，并把 Provider/Writer/Verifier timeout、unavailable 和 response error 标为 `infra_failure`。Planner 在 Full History 正确的 2 条 case 上，Last-N preservation 为 0%（2 regressions），Budgeted Selection 与 Summary + Recent 均为 50%（各 1 regression），Summary + Retrieval 为 100%（0 regressions）；各策略 recovery 均为 0，另外 3 条均为 Full History baseline failure。最终 Task 的 Full History 没有成功 case，因此 preservation rate 为 `null` 而不是误导性的 100%；没有可归因于 Context 的 task regression，4 条是 baseline failure，现金流 case 受 Full History Writer failure 影响，Summary + Retrieval 另有一条 Verifier timeout。报告的 `case_diagnostics` 保存每条策略的双方 verdict、actual tool/arguments、retention、token ratio、retrieval active 和 failure reason。
-
-这批 live evidence 支持的结论是：在两个 Full History Planner 能正确完成的 case 上，Summary + Retrieval 没有引入 Planner regression，并明显优于 Last-N；它同时保持 100% critical/protected retention。不能支持的结论是：当前 5-case live slice 无法证明最终 Task accuracy、普遍优于 Full History，或达到 60% token ratio；Full History 自身有 3 条 Planner baseline failure，且 Task 层存在 infra failure。Phase 5 因而证明了 Context Manager 的确定性预算、grounding、增量摘要、检索恢复和相对 preservation 能力，不证明 Planner/Writer/Verifier 的整体业务正确率。
+这批数据还不能证明最终 Task accuracy 或“所有情况下都优于 Full History”：Full History 自身有 3 条 Planner baseline failure，Task 层还有一条 Writer failure 和一条 Verifier timeout。报告把这些运行故障单独标为 `infra_failure`，不会算成 Context Manager 的错误。Phase 5 可以证明预算、grounding、增量摘要和检索恢复按设计工作；不能证明整个 Planner/Writer/Verifier 链路已经达到生产准确率。
 
 `CompositeToolRegistry` / `merge_registries()` 仅按工具名路由到原有 User、Market、RAG Registry，不修改 Phase 1 `ToolRegistry` 的注册、校验、鉴权、审计或错误行为。完整运行时可通过 `build_agent_tools(settings)` 组合全部 9 个 Tool；对应的行情和 RAG Provider 仍要求环境变量凭证及已构建的 embedding index。
 
@@ -522,7 +520,7 @@ registry = register_user_tools(UserDataService(
 - Phase 4.1（2026-09-12）：222 个默认测试通过；Execution Retry 覆盖 retryable/non-retryable 分类、指数退避、全图 attempt 预算、soft deadline、并行预算隔离和 Binding 参数稳定性。
 - Phase 4.2（2026-09-13）：265 个默认测试通过；Structured Verifier 覆盖结构化判定、确定性失败清单、共享 Result Path、输入一致性、Provider 错误和四项边界 Eval 指标；真实 Qwen Eval 独立使用 `-m live` 或脚本运行。
 - Phase 4.3（2026-09-15）：293 个默认测试通过，15/15 固定 Loop Eval 通过；闭环覆盖 PASS/REWRITE/REPLAN 路由、完整替换计划、success/empty 复用、force rerun、error 不复用、旧结果裁剪、依赖安全失效、跨轮共享 Tool attempt 预算和 no-progress 三条件判定。
-- Phase 5.4（2026-09-16）：Incremental Stable Summary、fallback rebuild、前缀稳定性指标和固定 12-case Context Ablation 完成；离线及固定五条真实 Qwen slice 均通过实现硬门禁，live exact accuracy 受 synthetic topic canonicalization 限制。
+- Phase 5（2026-09-16）：Context Manager、增量稳定摘要、本地历史检索和独立 holdout ablation 完成；离线硬门禁通过，live 报告按 Full History 基线区分 Context regression、baseline failure 和 infra failure。
 - 覆盖四个业务 Tool、FastAPI endpoint、Async HTTP Client、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
 - Market Data 测试使用 `httpx.MockTransport`，不访问 live provider；live smoke test 使用 `pytest -m live` 单独运行。
 
@@ -561,6 +559,6 @@ registry = register_user_tools(UserDataService(
 
 ## 下一步
 
-Phase 5 已结束。下一阶段可增加 semantic history retrieval、完整 prompt/token/cost 预算、循环 trace 持久化，并在 Qwen 配额恢复后重跑真实 Provider holdout；长期 Memory、跨会话持久化和 Agentic RL 不属于 Phase 5。
+Phase 5 已结束。下一阶段可考虑语义检索、完整 prompt/token/cost 预算和循环 trace 持久化。长期 Memory、跨会话持久化和 Agentic RL 不属于 Phase 5。
 
 后续工程约束：外部模型和数据源必须经 adapter/registry，LangGraph node 不直接依赖 provider SDK；API key 仅由环境配置注入；所有用户数据为 synthetic；每个功能补测试，并同步更新 README 的“当前能力 / 已知限制 / 下一步”。
