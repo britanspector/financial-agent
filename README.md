@@ -343,7 +343,7 @@ Phase 5.4 的 12 条 holdout 与上述 15 条开发集分离，并以 SHA-256 `8
 .\.venv\Scripts\python.exe scripts\evaluate_context_ablation.py --live --json-report reports\phase5_context_ablation_live.json
 ```
 
-2026-09-16 离线 deterministic holdout 的实现硬门禁全部通过：所有 budgeted/summary 策略未超预算，Summary 两策略 protected retention 100%，grounding、增量失败 rebuild 与既有回归由单元测试覆盖。Summary + Retrieval 的 Task/Planner accuracy 为 100%/100%，Last-N 为 0%/0%；其 history token ratio 为 93.32%，summary prefix stability 为 72.73%，增量摘要输入估算 1,181 tokens，对照每次完整 rebuild 为 1,189 tokens。`token ratio <= 0.60` 未达到，作为实验结果保留而不调整 holdout 或阻止提交。真实 Qwen slice 已实际发起，但账户在执行期间返回 `AllocationQuota.FreeTierOnly`（免费额度耗尽），因此 live report 诚实记录 Provider hard-gate failure，不将该轮 0 分解释为 Context 效果。
+2026-09-16 离线 deterministic holdout 的实现硬门禁全部通过：所有 budgeted/summary 策略未超预算，Summary 两策略 protected retention 100%，grounding、增量失败 rebuild 与既有回归由单元测试覆盖。Summary + Retrieval 的 Task/Planner accuracy 为 100%/100%，Last-N 为 0%/0%；其 history token ratio 为 93.32%，summary prefix stability 为 72.73%，增量摘要输入估算 1,181 tokens，对照每次完整 rebuild 为 1,189 tokens。`token ratio <= 0.60` 未达到，作为实验结果保留而不调整 holdout 或阻止提交。真实 Qwen slice 使用仍有额度的 `qwen3.7-flash-2026-07-15` 完成 5×5 运行并通过实现硬门禁：无 Provider/schema failure，Summary 两策略 protected retention 100%，Summary + Retrieval critical retention 100%、token ratio 87.10%、prefix stability 81.16%。当前 synthetic live Tool 的开放 `topic` 字段会被模型生成语义等价中文值，而评分器要求固定英文 canonical value，因此五种策略 exact Task/Planner accuracy 均为 0；该结果说明 live harness 的业务语义评分尚需独立校准，不能解释为 Context 效果失败。
 
 `CompositeToolRegistry` / `merge_registries()` 仅按工具名路由到原有 User、Market、RAG Registry，不修改 Phase 1 `ToolRegistry` 的注册、校验、鉴权、审计或错误行为。完整运行时可通过 `build_agent_tools(settings)` 组合全部 9 个 Tool；对应的行情和 RAG Provider 仍要求环境变量凭证及已构建的 embedding index。
 
@@ -514,7 +514,7 @@ registry = register_user_tools(UserDataService(
 - Phase 4.1（2026-09-12）：222 个默认测试通过；Execution Retry 覆盖 retryable/non-retryable 分类、指数退避、全图 attempt 预算、soft deadline、并行预算隔离和 Binding 参数稳定性。
 - Phase 4.2（2026-09-13）：265 个默认测试通过；Structured Verifier 覆盖结构化判定、确定性失败清单、共享 Result Path、输入一致性、Provider 错误和四项边界 Eval 指标；真实 Qwen Eval 独立使用 `-m live` 或脚本运行。
 - Phase 4.3（2026-09-15）：293 个默认测试通过，15/15 固定 Loop Eval 通过；闭环覆盖 PASS/REWRITE/REPLAN 路由、完整替换计划、success/empty 复用、force rerun、error 不复用、旧结果裁剪、依赖安全失效、跨轮共享 Tool attempt 预算和 no-progress 三条件判定。
-- Phase 5.4（2026-09-16）：Incremental Stable Summary、fallback rebuild、前缀稳定性指标和固定 12-case Context Ablation 完成；离线硬门禁通过，真实 Qwen slice 因宿主免费额度耗尽未形成有效效果对比。
+- Phase 5.4（2026-09-16）：Incremental Stable Summary、fallback rebuild、前缀稳定性指标和固定 12-case Context Ablation 完成；离线及固定五条真实 Qwen slice 均通过实现硬门禁，live exact accuracy 受 synthetic topic canonicalization 限制。
 - 覆盖四个业务 Tool、FastAPI endpoint、Async HTTP Client、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
 - Market Data 测试使用 `httpx.MockTransport`，不访问 live provider；live smoke test 使用 `pytest -m live` 单独运行。
 

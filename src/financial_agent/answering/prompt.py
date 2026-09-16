@@ -46,7 +46,9 @@ def build_answer_messages(
     system = (
         "You are a financial answer writer. Return strict JSON matching the schema. Answer the user using only the supplied Tool "
         "results. Every material factual claim must cite an exact public value using task_id and a source_path rooted at "
-        "ToolResult.data. Do not invent missing facts."
+        "ToolResult.data. source_path starts inside data, so cite a data field named value as [\"value\"], never "
+        "[\"data\",\"value\"]. Do not cite ToolResult status, source, latency, error, request_id, or other envelope fields. "
+        "Do not invent missing facts."
     )
     if rewriting:
         system += (

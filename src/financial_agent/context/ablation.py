@@ -161,6 +161,22 @@ class _RecordingContextManager:
         return selection
 
 
+class _RecordingPlanner:
+    def __init__(self, delegate: StructuredPlanner) -> None:
+        self.delegate = delegate
+        self.last_tasks = []
+
+    def plan(self, request):
+        output = self.delegate.plan(request)
+        self.last_tasks = list(output.tasks)
+        return output
+
+    def replan(self, request, previous_plan, tool_results, feedback):
+        output = self.delegate.replan(request, previous_plan, tool_results, feedback)
+        self.last_tasks = list(output.tasks)
+        return output
+
+
 class _OfflinePlannerProvider:
     def __init__(self, case: AblationCase) -> None:
         self.case = case
@@ -323,7 +339,9 @@ def _run_case(case, strategy, mode, budget, last_n, live_factories) -> AblationR
         planner_provider, answer_provider, verifier_provider = (
             live_factories[1](), live_factories[2](), live_factories[3]()
         )
-    planner = StructuredPlanner(planner_provider, registry, context_manager=recorder, context_policy=policy)
+    planner = _RecordingPlanner(StructuredPlanner(
+        planner_provider, registry, context_manager=recorder, context_policy=policy,
+    ))
     writer = AnswerWriter(answer_provider, registry, context_manager=recorder, context_policy=policy)
     verifier = StructuredVerifier(verifier_provider, registry, context_manager=recorder, context_policy=policy)
     failure = None
@@ -335,17 +353,19 @@ def _run_case(case, strategy, mode, budget, last_n, live_factories) -> AblationR
             retry_policy=RetryPolicy(max_retry=0), sleeper=lambda _: None,
         )
         plan = result.plan
-        planner_correct = (
-            result.status == "completed" and len(plan) == 1
-            and plan[0].tool_name == "lookup_financial_fact"
-            and plan[0].arguments == case.expected_arguments
-        )
-        task_correct = planner_correct and result.answer is not None and case.answer_value in result.answer
     except Exception as exc:  # Per-case report retains provider/schema failures without leaking content.
         result = None
-        plan = []
-        planner_correct = task_correct = False
+        plan = planner.last_tasks
         failure = type(exc).__name__
+    planner_correct = (
+        len(plan) == 1
+        and plan[0].tool_name == "lookup_financial_fact"
+        and plan[0].arguments == case.expected_arguments
+    )
+    task_correct = (
+        planner_correct and result is not None and result.status == "completed"
+        and result.answer is not None and case.answer_value in result.answer
+    )
     elapsed = (perf_counter() - started) * 1_000
     final_selections = recorder.selections[before_final:]
     final = final_selections[0] if final_selections else recorder.selections[-1]
