@@ -54,6 +54,23 @@ def test_qwen_secret_and_model_defaults(monkeypatch):
     assert settings.verifier_timeout_seconds == 30.0
     assert settings.answer_model == "qwen3.7-flash"
     assert settings.answer_temperature == 0.1
+    assert settings.context_strategy == "full_history"
+    assert settings.context_last_n == 6
+    assert settings.context_summary_recent_n == 3
+    assert settings.context_summary_budget_ratio == 0.4
+    assert settings.context_summary_cache_size == 128
+    assert settings.context_summary_max_facts == 24
+    assert settings.context_summary_incremental_enabled is True
+    assert settings.context_retrieval_top_k == 4
+    assert settings.context_retrieval_min_score == 0.15
+    assert settings.context_retrieval_recent_reservation_ratio == 0.3
+    assert settings.context_retrieval_protected_summary_reservation_ratio == 0.1
+    assert settings.context_retrieval_history_reservation_ratio == 0.1
+    assert settings.planner_context_budget_tokens == 4096
+    assert settings.answer_context_budget_tokens == 4096
+    assert settings.verifier_context_budget_tokens == 4096
+    assert settings.summary_model == "qwen3.7-flash"
+    assert settings.summary_temperature == 0
     assert settings.loop_max_rewrite == 2
     assert settings.loop_max_replan == 2
     assert settings.loop_max_iterations == 5
@@ -125,6 +142,32 @@ def test_loop_policy_is_built_from_settings(monkeypatch):
     ("ANSWER_TIMEOUT_SECONDS", "0"), ("ANSWER_TEMPERATURE", "3"),
 ])
 def test_invalid_agent_loop_settings_rejected(monkeypatch, key, value):
+    monkeypatch.setenv(f"FINANCIAL_AGENT_{key}", value)
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_context_retrieval_reservations_cannot_exceed_total_budget():
+    with pytest.raises(ValidationError, match="reservation ratios"):
+        Settings(
+            context_retrieval_recent_reservation_ratio=0.6,
+            context_retrieval_protected_summary_reservation_ratio=0.3,
+            context_retrieval_history_reservation_ratio=0.2,
+        )
+
+
+@pytest.mark.parametrize(("key", "value"), [
+    ("CONTEXT_STRATEGY", "unknown"),
+    ("CONTEXT_LAST_N", "-1"),
+    ("CONTEXT_SUMMARY_RECENT_N", "-1"),
+    ("CONTEXT_SUMMARY_BUDGET_RATIO", "1.1"),
+    ("CONTEXT_SUMMARY_CACHE_SIZE", "-1"),
+    ("CONTEXT_SUMMARY_MAX_FACTS", "0"),
+    ("PLANNER_CONTEXT_BUDGET_TOKENS", "-1"),
+    ("ANSWER_CONTEXT_BUDGET_TOKENS", "-1"),
+    ("VERIFIER_CONTEXT_BUDGET_TOKENS", "-1"),
+])
+def test_invalid_context_settings_rejected(monkeypatch, key, value):
     monkeypatch.setenv(f"FINANCIAL_AGENT_{key}", value)
     with pytest.raises(ValidationError):
         Settings()

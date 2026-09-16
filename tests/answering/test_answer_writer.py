@@ -40,6 +40,7 @@ def test_writer_returns_validated_evidence_grounded_draft():
     draft = AnswerWriter(provider, Catalog()).write(UserQuery(query="q"), [task], [result])
     payload = json.loads(provider.calls[0][0][1]["content"])
     assert draft.answer == "7"
+    assert 'cite a data field named value as ["value"]' in provider.calls[0][0][0]["content"]
     assert "request_id" not in provider.calls[0][0][1]["content"]
     assert payload["tool_results"][0]["data"] == {"value": 7}
 

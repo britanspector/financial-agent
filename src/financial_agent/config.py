@@ -54,6 +54,27 @@ class Settings(BaseSettings):
     answer_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     answer_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     answer_temperature: float = Field(default=0.1, ge=0, le=2)
+    context_strategy: Literal[
+        "full_history", "last_n", "budgeted_selection", "summary_compression", "summary_retrieval"
+    ] = "full_history"
+    context_last_n: int = Field(default=6, ge=0, le=100_000)
+    context_summary_recent_n: int = Field(default=3, ge=0, le=100_000)
+    context_summary_budget_ratio: float = Field(default=0.4, ge=0, le=1)
+    context_summary_cache_size: int = Field(default=128, ge=0, le=100_000)
+    context_summary_max_facts: int = Field(default=24, ge=1, le=1_000)
+    context_summary_incremental_enabled: bool = True
+    context_retrieval_top_k: int = Field(default=4, ge=0, le=100)
+    context_retrieval_min_score: float = Field(default=0.15, ge=0, le=2)
+    context_retrieval_recent_reservation_ratio: float = Field(default=0.3, ge=0, le=1)
+    context_retrieval_protected_summary_reservation_ratio: float = Field(default=0.1, ge=0, le=1)
+    context_retrieval_history_reservation_ratio: float = Field(default=0.1, ge=0, le=1)
+    planner_context_budget_tokens: int = Field(default=4096, ge=0, le=1_000_000)
+    answer_context_budget_tokens: int = Field(default=4096, ge=0, le=1_000_000)
+    verifier_context_budget_tokens: int = Field(default=4096, ge=0, le=1_000_000)
+    summary_model: str = Field(default="qwen3.7-flash", min_length=1)
+    summary_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    summary_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    summary_temperature: float = Field(default=0.0, ge=0, le=2)
     loop_max_rewrite: int = Field(default=2, ge=0, le=100)
     loop_max_replan: int = Field(default=2, ge=0, le=100)
     loop_max_iterations: int = Field(default=5, ge=1, le=1_000)
@@ -74,4 +95,11 @@ class Settings(BaseSettings):
         allowed = flash_dimensions if self.qwen_embedding_model.endswith("-flash") else full_dimensions
         if self.qwen_embedding_dimension not in allowed:
             raise ValueError("Unsupported dimension for configured Qwen embedding model")
+        retrieval_reservations = (
+            self.context_retrieval_recent_reservation_ratio
+            + self.context_retrieval_protected_summary_reservation_ratio
+            + self.context_retrieval_history_reservation_ratio
+        )
+        if retrieval_reservations > 1 + 1e-9:
+            raise ValueError("Context retrieval reservation ratios must sum to at most 1")
         return self

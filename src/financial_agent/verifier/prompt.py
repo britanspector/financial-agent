@@ -11,6 +11,8 @@ from financial_agent.agent.models import Task, TaskExecutionResult
 from financial_agent.agent.result_projection import project_result
 from financial_agent.schemas import UserQuery
 from financial_agent.verifier.models import DraftAnswer
+from financial_agent.context.models import HistorySummary, RetrievedHistoryTurn
+from financial_agent.context.retrieval import retrieved_history_payload
 
 
 VERIFICATION_RULES = (
@@ -64,6 +66,8 @@ def build_verifier_messages(
     *,
     resolved_evidence: list[dict[str, Any]],
     failed_task_ids: list[str],
+    history_summary: HistorySummary | None = None,
+    retrieved_history: list[RetrievedHistoryTurn] | None = None,
 ) -> list[dict[str, str]]:
     payload = {
         "query": request.query,
@@ -76,14 +80,30 @@ def build_verifier_messages(
         },
         "failed_task_ids": failed_task_ids,
     }
+    if retrieved_history:
+        payload["retrieved_history"] = retrieved_history_payload(retrieved_history)
     json_payload = TypeAdapter(Any).dump_python(payload, mode="json")
-    return [
+    messages = [
         {
             "role": "system",
-            "content": "You are a financial answer verifier. Return strict JSON matching the supplied schema. " + VERIFICATION_RULES,
-        },
-        {
-            "role": "user",
-            "content": json.dumps(json_payload, ensure_ascii=False, separators=(",", ":")),
+            "content": "You are a financial answer verifier. Return strict JSON matching the supplied schema. "
+            + VERIFICATION_RULES
+            + (" Treat history_summary as grounded stable history. Resolve conflicts using current query, raw recent "
+               "history, retrieved raw history, then history_summary."
+               if history_summary is not None or retrieved_history else ""),
         },
     ]
+    if history_summary is not None:
+        messages.append({
+            "role": "user",
+            "content": json.dumps(
+                {"history_summary": history_summary.model_dump(mode="json")},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        })
+    messages.append({
+        "role": "user",
+        "content": json.dumps(json_payload, ensure_ascii=False, separators=(",", ":")),
+    })
+    return messages
