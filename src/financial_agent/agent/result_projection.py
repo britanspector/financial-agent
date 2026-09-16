@@ -13,7 +13,7 @@ def project_result(item: TaskExecutionResult) -> dict[str, Any]:
         "task_id": item.task_id,
         "tool_name": item.tool_name,
         "status": result.status,
-        "data": _json_value(result.data),
+        "data": public_result_data(result.data),
         "source": result.source,
         "error": result.error.model_dump(mode="json") if result.error else None,
         "retry_count": item.retry_count,
@@ -21,12 +21,12 @@ def project_result(item: TaskExecutionResult) -> dict[str, Any]:
     }
 
 
-def _json_value(value: Any) -> Any:
+def public_result_data(value: Any) -> Any:
     """Project typed public Tool data into JSON-compatible prompt content."""
     if isinstance(value, BaseModel):
         return value.model_dump(mode="json")
     if isinstance(value, list):
-        return [_json_value(item) for item in value]
+        return [public_result_data(item) for item in value]
     if isinstance(value, dict):
-        return {key: _json_value(item) for key, item in value.items()}
+        return {key: public_result_data(item) for key, item in value.items()}
     return value

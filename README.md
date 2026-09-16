@@ -2,7 +2,7 @@
 
 用于深度学习和求职展示的本地多工具 Agent 工程探索。全部用户数据为 synthetic，不连接真实公司内部系统。
 
-**当前阶段：Phase 6.1 已完成。** 项目已具备完全离线、确定性的 Agent E2E Eval Harness，可从用户 Query 一直验证到最终答案，并覆盖 Context、Planner、执行图、Retry、Writer、Verifier、Replan/Rewrite 和共享 Tool budget。Phase 5 的 Context Manager 策略与默认 `full_history` 行为保持不变。
+**当前阶段：Phase 6.2 已完成。** 在完全离线、确定性的 Agent E2E Eval Harness 之上，项目新增了版本化、强类型、run-scoped Unified Agent Trace；它统一审计 Context、Plan/Replan、Tool attempt/retry/reuse、Writer、Verifier、Loop iteration、budget 与最终停止原因，同时保持普通 Agent 行为和默认 no-op tracing 不变。
 
 ## 项目结构与依赖
 
@@ -272,9 +272,28 @@ Phase 6.1 新增 `eval/agent_e2e/` 固定评测集。它通过真实 Structured 
 ```powershell
 .\.venv\Scripts\python.exe scripts\evaluate_agent_e2e.py
 .\.venv\Scripts\python.exe scripts\evaluate_agent_e2e.py --json-report reports/phase6_agent_e2e.json
+.\.venv\Scripts\python.exe scripts\evaluate_agent_e2e.py --trace-jsonl reports/phase6_agent_traces.jsonl
 ```
 
-Harness 仅记录 scorer 必需的 Plan/Replan 输出、规范化 Tool 调用、Context retrieval message indexes 和最终 `AgentLoopResult`，不建设通用 Observability 或持久化 AgentRunTrace。离线 replay 可以证明全链路集成、预算语义和 scorer 可复现，但不能替代真实模型准确率评测；完整 trace 与 live benchmark 留待 Phase 6.2。
+Phase 6.2 后，E2E scorer 直接消费 `evaluation` capture mode 的 Unified Trace：Tool 指标来自强类型 `ToolAttemptEvent`，Context 验证来自 `ContextSelectedEvent`，Retry、Reuse、Replan 和共享 budget 也不再依赖 eval-only recording wrappers。离线 replay 可以证明全链路集成、预算语义和 scorer 可复现，但不能替代真实模型准确率评测。
+
+## Unified Agent Trace / Observability
+
+`financial_agent.observability.run_agent_loop_traced(...)` 包装现有 Loop 并返回 `TracedAgentLoopResult(result, trace, persistence)`；普通 `run_agent_loop(...)` 的签名、结果和异常语义不变，也不会默认写文件。`AgentTrace` 固定使用 schema version `1.0`，事件是以 `kind` 为 discriminator 的 Pydantic union，不使用自由格式 payload。显式传入 `JsonlTraceSink` 时，每个完整 run 写一行；`load_agent_traces(...)` 会逐行验证版本与完整 schema。sink、projection、sanitization 或 serialization 失败只会使 trace 降级或 persistence 标记为 failed，不会覆盖 Agent 原始结果或异常。
+
+默认 `capture_mode="safe"` 不保存 query/history 正文、Tool 参数键和值、Tool result data、draft/final answer、Verifier feedback、task ID 或 binding/evidence path；参数只保留数量、类型摘要与 run-scoped HMAC，模型生成的引用也使用同一 run 的随机 HMAC 关联。受控 synthetic eval 可显式使用 `evaluation` 保存公开值，但两种模式都会递归拒绝 credential、`CallContext`、私有字段与不可 JSON 化对象。`ContextSelection` 公共 schema 没有增加 selected indexes；索引只在 trace projection 中 occurrence-safe 地计算。
+
+```python
+from financial_agent.observability import JsonlTraceSink, run_agent_loop_traced
+
+traced = run_agent_loop_traced(
+    request, planner, validator, registry, writer, verifier,
+    capture_mode="safe",
+    sink=JsonlTraceSink("local-agent-traces.jsonl"),
+)
+```
+
+首版仅提供进程内线程安全的本地完整-run JSONL，不提供事件流、跨进程锁、rotation、远程上传、dashboard 或默认 retention。Trace 是后续 ablation 的可审计输入，不替代应用日志。
 
 ## Context Manager
 
@@ -538,6 +557,7 @@ registry = register_user_tools(UserDataService(
 - Phase 4.3（2026-09-15）：293 个默认测试通过，15/15 固定 Loop Eval 通过；闭环覆盖 PASS/REWRITE/REPLAN 路由、完整替换计划、success/empty 复用、force rerun、error 不复用、旧结果裁剪、依赖安全失效、跨轮共享 Tool attempt 预算和 no-progress 三条件判定。
 - Phase 5（2026-09-16）：Context Manager、增量稳定摘要、本地历史检索和独立 holdout ablation 完成；离线硬门禁通过，live 报告按 Full History 基线区分 Context regression、baseline failure 和 infra failure。
 - Phase 6.1（2026-09-16）：369 个默认测试和 2 个 integration tests 通过；12/12 固定 Agent E2E 场景通过。Task Success、Final Answer Correctness 和 Replan Recovery 均为 1.0000，Tool Selection Accuracy 为 0.9167，Unnecessary Tool Call Rate 为 0.0556，Average Tool Attempts 为 1.8333，Loop Iterations 为 1.3333。
+- Phase 6.2（2026-09-16）：382 个默认测试和 2 个 integration tests 通过；新增 safe/evaluation 双 capture mode、强类型 `AgentTrace`、统一 projection/sanitization、失败隔离的 recorder 与本地 JSONL round-trip；Phase 6.1 scorer 已迁移到 Unified Trace，固定指标口径与 gold 未改变。
 - 覆盖四个业务 Tool、FastAPI endpoint、Async HTTP Client、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
 - Market Data 测试使用 `httpx.MockTransport`，不访问 live provider；live smoke test 使用 `pytest -m live` 单独运行。
 
@@ -559,6 +579,7 @@ registry = register_user_tools(UserDataService(
 - Verifier 驱动的有界 Agent Loop、证据约束 Answer Writer、完整 Replan、依赖安全结果复用、显式 force rerun 和跨轮 Tool attempt 总预算。
 - Planner、Writer、Verifier 共用的 Context Manager、五种 history 策略、Incremental Stable Summary、本地 BM25 history retrieval、弹性预算、安全指标及可注入 estimator/provider/retriever。
 - 完全离线的 Agent E2E Eval Harness：真实 9 Tool 契约、全链路 Retry/Replan/Rewrite/Binding/Context、结构化答案与证据评分，以及七项固定聚合指标。
+- 版本化 Unified Agent Trace：强类型事件、跨并行 Tool 的真实发生序列、单 Task attempt/retry 关联、loop-level budget、safe/evaluation projection、失败隔离和显式本地 JSONL sink。
 - Prompt-independent 的 40 条 Planner Eval Set：单/并行/依赖、三源组合、当前/历史时间、RAG filters、法规、FAQ、无关 Tool 与 abstain 边界，以及六项离线/真实模型通用指标。
 
 ## 已知限制
@@ -573,11 +594,12 @@ registry = register_user_tools(UserDataService(
 - Market Data v0.1 已提供同步 Tushare REST Provider；120 积分下尚无指数、复权、实时行情、分钟线、Level-2、新闻、资金流或指标库。
 - 当前为同步本地访问；审计没有多进程并发保证、轮转或防篡改能力。日志不是通用敏感数据脱敏器。
 - Context budget 只覆盖 history，尚不覆盖 query、tools、plan、Tool Results、draft 或 feedback；history retrieval 仍无 embedding/reranker，Summary 增量更新只支持 additions/replacements 且不跨进程持久化；`summary_prefix_stability_ratio` 不是 Provider cache hit 指标，也不提供长期 Memory、精确 tokenizer 或 KV Cache 优化。
-- Phase 6.1 使用确定性 replay provider 和 synthetic Service/Provider fixture，只证明链路、预算语义与 scorer 可复现；不代表真实模型生产准确率。Recording wrappers 不是完整 Observability，也不提供持久化 AgentRunTrace。
+- Phase 6.1/6.2 使用确定性 replay provider 和 synthetic Service/Provider fixture，只证明链路、预算语义、trace 完整性与 scorer 可复现；不代表真实模型生产准确率。
+- Unified Trace 首版没有 event streaming、跨进程文件锁、rotation、远程平台、dashboard 或生产级 retention；safe HMAC 只保证 run 内关联，不支持跨 run 用户追踪。
 - 依赖只有兼容范围，未锁定全部传递依赖；只在当前 Windows 环境验证。
 
 ## 下一步
 
-Phase 6.1 已结束。Phase 6.2 可增加真实模型 benchmark、完整 AgentRunTrace 和更系统的失败归因；这些能力不提前放入当前最小 E2E scorer。长期 Memory、跨会话持久化和 Agentic RL 仍不在当前范围内。
+Phase 6.2 已结束。Phase 6.3 可直接以强类型 Unified Trace 实施 Agent ablation、失败归因与分层指标；真实模型 benchmark 仍应作为独立 live gate。长期 Memory、跨会话持久化和 Agentic RL 仍不在当前范围内。
 
 后续工程约束：外部模型和数据源必须经 adapter/registry，LangGraph node 不直接依赖 provider SDK；API key 仅由环境配置注入；所有用户数据为 synthetic；每个功能补测试，并同步更新 README 的“当前能力 / 已知限制 / 下一步”。

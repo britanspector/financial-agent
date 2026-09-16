@@ -7,18 +7,23 @@ import json
 from pathlib import Path
 
 from financial_agent.agent.e2e_evaluation import evaluate_agent_e2e, load_e2e_eval_set
+from financial_agent.observability import JsonlTraceSink
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the deterministic Agent E2E evaluation")
     parser.add_argument("--json-report", type=Path, help="Write the complete machine-readable report")
+    parser.add_argument("--trace-jsonl", type=Path, help="Append one evaluation trace per case")
     args = parser.parse_args()
     root = Path(__file__).parents[1]
     scenarios, expectations = load_e2e_eval_set(
         root / "eval" / "agent_e2e" / "scenarios.jsonl",
         root / "eval" / "agent_e2e" / "expectations.jsonl",
     )
-    report = evaluate_agent_e2e(scenarios, expectations)
+    report = evaluate_agent_e2e(
+        scenarios, expectations,
+        trace_sink=JsonlTraceSink(args.trace_jsonl) if args.trace_jsonl else None,
+    )
     print(json.dumps({
         "case_count": report.case_count,
         "passed_count": report.passed_count,

@@ -70,6 +70,10 @@ class ToolAttemptBudget:
         with self._lock:
             return max(0, self._max_attempts - self._attempt_count)
 
+    @property
+    def max_attempts(self) -> int:
+        return self._max_attempts
+
 
 class ExecutionBudget:
     """A graph-run deadline backed by an optionally loop-wide attempt budget."""
@@ -118,6 +122,18 @@ class ExecutionBudget:
     @property
     def attempt_count(self) -> int:
         return self._attempt_budget.attempt_count
+
+    @property
+    def max_attempts(self) -> int:
+        return self._attempt_budget.max_attempts
+
+    @property
+    def remaining(self) -> int:
+        return self._attempt_budget.remaining
+
+    @property
+    def exhausted(self) -> bool:
+        return self._attempt_budget.exhausted
 
     @property
     def attempt_budget_exhausted(self) -> bool:

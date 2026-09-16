@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from pydantic import Field
 
-from financial_agent.agent.loop import AgentLoopResult, LoopPolicy, run_agent_loop
+from financial_agent.agent.loop import AgentLoopResult, LoopPolicy
 from financial_agent.agent.retry import RetryPolicy
 from financial_agent.answering.service import AnswerWriter
 from financial_agent.context import ContextManager, ContextPolicy
@@ -31,6 +31,8 @@ from financial_agent.knowledge.service import KnowledgeRetrievalService
 from financial_agent.market_data.models import MarketBar, MarketHistory, MarketSnapshot
 from financial_agent.market_data.runtime import register_market_tools
 from financial_agent.market_data.service import MarketDataService
+from financial_agent.observability import AgentTrace, TraceSink, run_agent_loop_traced
+from financial_agent.observability.models import ContextSelectedEvent, PlanProposedEvent, ToolAttemptEvent
 from financial_agent.planner.service import StructuredPlanner
 from financial_agent.planner.validator import PlanValidator
 from financial_agent.schemas import Message, Schema, UserQuery
@@ -118,6 +120,7 @@ class E2ECaseResult(Schema):
     context_observations: list[ContextObservation]
     plan_observations: list[PlanObservation]
     result: AgentLoopResult
+    unified_trace: AgentTrace
 
 
 class AgentE2EMetrics(Schema):
@@ -155,11 +158,12 @@ def load_e2e_eval_set(
 
 
 def evaluate_agent_e2e(
-    scenarios: list[E2EScenario], expectations: list[E2EExpectation],
+    scenarios: list[E2EScenario], expectations: list[E2EExpectation], *,
+    trace_sink: TraceSink | None = None,
 ) -> AgentE2EEvaluationReport:
     if not scenarios or [item.case_id for item in scenarios] != [item.case_id for item in expectations]:
         raise ValueError("E2E scenarios and expectations must be non-empty and aligned")
-    observations = [_run_case(case, expected) for case, expected in zip(scenarios, expectations)]
+    observations = [_run_case(case, expected, trace_sink) for case, expected in zip(scenarios, expectations)]
     solvable = [item for item, expected in zip(observations, expectations) if expected.solvable]
     replan_targets = [
         item for item, expected in zip(observations, expectations)
@@ -190,27 +194,26 @@ def evaluate_agent_e2e(
     )
 
 
-def _run_case(case: E2EScenario, expected: E2EExpectation) -> E2ECaseResult:
+def _run_case(case: E2EScenario, expected: E2EExpectation, trace_sink: TraceSink | None) -> E2ECaseResult:
     registry, call_context = _fixture_registry(case.user_faults)
-    recording_registry = _RecordingRegistry(registry)
-    context_manager = _RecordingContextManager(ContextManager())
-    planner = _RecordingPlanner(StructuredPlanner(
-        _ReplayProvider(case.planner_calls), recording_registry,
+    context_manager = ContextManager()
+    planner = StructuredPlanner(
+        _ReplayProvider(case.planner_calls), registry,
         context_manager=context_manager, context_policy=case.context_policy,
-    ))
+    )
     writer = AnswerWriter(
-        _ReplayProvider(case.answer_calls), recording_registry,
+        _ReplayProvider(case.answer_calls), registry,
         context_manager=context_manager, context_policy=case.context_policy,
     )
     verifier = StructuredVerifier(
-        _ReplayProvider(case.verifier_calls), recording_registry,
+        _ReplayProvider(case.verifier_calls), registry,
         context_manager=context_manager, context_policy=case.context_policy,
     )
-    result = run_agent_loop(
+    traced = run_agent_loop_traced(
         UserQuery(query=case.query, history=case.history),
         planner,
-        PlanValidator(recording_registry),
-        recording_registry,
+        PlanValidator(registry),
+        registry,
         writer,
         verifier,
         policy=case.loop_policy,
@@ -218,19 +221,29 @@ def _run_case(case: E2EScenario, expected: E2EExpectation) -> E2ECaseResult:
         context=call_context,
         max_concurrency=1,
         sleeper=lambda _: None,
+        capture_mode="evaluation",
+        sink=trace_sink,
     )
-    actual_tools = recording_registry.logical_tools()
-    normalized_expected = [recording_registry.normalize(item) for item in expected.expected_tools]
+    result, unified_trace = traced.result, traced.trace
+    attempts = [event for event in unified_trace.events if isinstance(event, ToolAttemptEvent)]
+    invocations = [ToolInvocation(
+        tool_name=event.tool_name,
+        arguments=event.arguments.value,
+        status=event.result_status,
+        error_code=event.error_code,
+    ) for event in attempts]
+    actual_tools = _logical_tools(invocations)
+    normalized_expected = [_normalize_tool(registry, item) for item in expected.expected_tools]
     actual_counter = Counter(_tool_key(item) for item in actual_tools)
     expected_counter = Counter(_tool_key(item) for item in normalized_expected)
     selection_correct = actual_counter == expected_counter
     unnecessary = sum((actual_counter - expected_counter).values())
-    answer_correct = _answer_correct(result, expected, recording_registry)
+    answer_correct = _answer_correct(result, expected, registry, actual_tools)
     final_results_ok = all(item.result.status != "error" for item in result.task_results)
     task_success = result.status == "completed" and answer_correct and final_results_ok
     retrieved = {
         index
-        for observation in context_manager.observations
+        for observation in _context_observations(unified_trace)
         for index in observation.retrieved_message_indexes
         if observation.retrieval_active
     }
@@ -256,14 +269,15 @@ def _run_case(case: E2EScenario, expected: E2EExpectation) -> E2ECaseResult:
         tool_selection_correct=selection_correct,
         unnecessary_tool_calls=unnecessary,
         actual_logical_tools=actual_tools,
-        tool_invocations=recording_registry.invocations,
-        context_observations=context_manager.observations,
-        plan_observations=planner.observations,
+        tool_invocations=invocations,
+        context_observations=_context_observations(unified_trace),
+        plan_observations=_plan_observations(unified_trace),
         result=result,
+        unified_trace=unified_trace,
     )
 
 
-def _answer_correct(result, expected, registry) -> bool:
+def _answer_correct(result, expected, registry, actual_tools) -> bool:
     if result.answer is None or result.draft is None:
         return False
     folded = result.answer.casefold()
@@ -278,16 +292,16 @@ def _answer_correct(result, expected, registry) -> bool:
         if task is None:
             continue
         try:
-            candidates = [registry.normalize(LogicalTool(
+            candidates = [_normalize_tool(registry, LogicalTool(
                 tool_name=task.tool_name, arguments=task.arguments,
             ))]
         except ValueError:
             candidates = [
-                item for item in registry.logical_tools() if item.tool_name == task.tool_name
+                item for item in actual_tools if item.tool_name == task.tool_name
             ]
         actual.update((_tool_key(item), tuple(reference.source_path)) for item in candidates)
     required = {
-        (_tool_key(registry.normalize(item)), tuple(item.source_path))
+        (_tool_key(_normalize_tool(registry, item)), tuple(item.source_path))
         for item in expected.required_evidence
     }
     return required.issubset(actual)
@@ -309,83 +323,36 @@ class _ReplayProvider:
         return call.output
 
 
-class _RecordingRegistry:
-    def __init__(self, registry) -> None:
-        self._registry = registry
-        self.invocations: list[ToolInvocation] = []
-
-    def describe(self):
-        return self._registry.describe()
-
-    def input_model(self, name):
-        return self._registry.input_model(name)
-
-    def output_model(self, name):
-        return self._registry.output_model(name)
-
-    def invoke(self, name, arguments, *, context, request_id=None):
-        normalized = self.normalize(LogicalTool(tool_name=name, arguments=arguments)).arguments
-        result = self._registry.invoke(name, arguments, context=context, request_id=request_id)
-        self.invocations.append(ToolInvocation(
-            tool_name=name,
-            arguments=normalized,
-            status=result.status,
-            error_code=result.error.code if result.error else None,
-        ))
-        return result
-
-    def normalize(self, item: LogicalTool) -> LogicalTool:
-        model = self.input_model(item.tool_name)
-        if model is None:
-            raise ValueError(f"Unknown E2E Tool: {item.tool_name}")
-        arguments = model.model_validate(item.arguments).model_dump(mode="json")
-        return LogicalTool(tool_name=item.tool_name, arguments=arguments)
-
-    def logical_tools(self) -> list[LogicalTool]:
-        unique: dict[str, LogicalTool] = {}
-        for call in self.invocations:
-            item = LogicalTool(tool_name=call.tool_name, arguments=call.arguments)
-            unique.setdefault(_tool_key(item), item)
-        return list(unique.values())
+def _normalize_tool(registry, item: LogicalTool) -> LogicalTool:
+    model = registry.input_model(item.tool_name)
+    if model is None:
+        raise ValueError(f"Unknown E2E Tool: {item.tool_name}")
+    arguments = model.model_validate(item.arguments).model_dump(mode="json")
+    return LogicalTool(tool_name=item.tool_name, arguments=arguments)
 
 
-class _RecordingPlanner:
-    def __init__(self, planner: StructuredPlanner) -> None:
-        self._planner = planner
-        self.observations: list[PlanObservation] = []
-
-    def plan(self, request):
-        output = self._planner.plan(request)
-        self._record("initial", output.tasks)
-        return output
-
-    def replan(self, request, previous_plan, tool_results, feedback):
-        output = self._planner.replan(request, previous_plan, tool_results, feedback)
-        self._record("replan", output.tasks)
-        return output
-
-    def _record(self, action, tasks) -> None:
-        self.observations.append(PlanObservation(
-            action=action,
-            tools=[LogicalTool(tool_name=task.tool_name, arguments=task.arguments) for task in tasks],
-        ))
+def _logical_tools(invocations: list[ToolInvocation]) -> list[LogicalTool]:
+    unique: dict[str, LogicalTool] = {}
+    for call in invocations:
+        item = LogicalTool(tool_name=call.tool_name, arguments=call.arguments)
+        unique.setdefault(_tool_key(item), item)
+    return list(unique.values())
 
 
-class _RecordingContextManager:
-    def __init__(self, manager: ContextManager) -> None:
-        self._manager = manager
-        self.observations: list[ContextObservation] = []
+def _context_observations(trace: AgentTrace) -> list[ContextObservation]:
+    return [ContextObservation(
+        component=event.component,
+        retrieval_active=event.retrieval_active,
+        retrieved_message_indexes=event.retrieved_message_indexes,
+    ) for event in trace.events if isinstance(event, ContextSelectedEvent)]
 
-    def select(self, request, component, policy):
-        selection = self._manager.select(request, component, policy)
-        self.observations.append(ContextObservation(
-            component=component,
-            retrieval_active=selection.metrics.retrieval_active,
-            retrieved_message_indexes=sorted({
-                index for turn in selection.retrieved_history for index in turn.message_indexes
-            }),
-        ))
-        return selection
+
+def _plan_observations(trace: AgentTrace) -> list[PlanObservation]:
+    events = [event for event in trace.events if isinstance(event, PlanProposedEvent)]
+    return [PlanObservation(
+        action="initial" if index == 0 else "replan",
+        tools=[LogicalTool(tool_name=task.tool_name, arguments=task.arguments.value) for task in event.tasks],
+    ) for index, event in enumerate(events)]
 
 
 class _MemoryAudit:

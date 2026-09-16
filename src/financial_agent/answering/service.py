@@ -56,4 +56,8 @@ class AnswerWriter:
             resolve_evidence(draft.evidence, plan, results, self._catalog)
         except (ValidationError, InvalidEvidenceInputError) as exc:
             raise AnswerProviderResponseError("Invalid answer response") from exc
+        from financial_agent.observability.recorder import active_recorder
+        recorder = active_recorder()
+        if recorder is not None:
+            recorder.record_writer(draft, "rewrite" if previous_draft is not None else "write")
         return draft
