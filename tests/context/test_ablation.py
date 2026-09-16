@@ -15,7 +15,7 @@ EXPECTED_SHA256 = "8db13562ebbe11dffcb9a218f10e90011d902fc92c5182d8eb16bb86827a3
 
 
 def test_phase54_holdout_is_fixed_and_offline_hard_gates_pass():
-    payload = HOLDOUT.read_bytes()
+    payload = HOLDOUT.read_text(encoding="utf-8").encode("utf-8")
     assert sha256(payload).hexdigest() == EXPECTED_SHA256
 
     report = evaluate_context_ablation(

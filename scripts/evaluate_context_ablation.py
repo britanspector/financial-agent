@@ -46,7 +46,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     path = ROOT / "eval" / "context_ablation" / "holdout_cases.jsonl"
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
     cases = load_ablation_cases(path)
     if args.rescore_report:
         existing = AblationReport.model_validate_json(
