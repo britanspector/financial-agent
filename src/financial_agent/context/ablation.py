@@ -121,6 +121,44 @@ class AblationStrategyMetrics(Schema):
     retrieved_turn_count: int
 
 
+OutcomeVerdict = Literal["correct", "incorrect", "infra_failure"]
+RelativeVerdict = Literal[
+    "preserved", "context_regression", "recovery", "baseline_failure", "infra_failure",
+]
+
+
+class RelativeOutcomeMetrics(Schema):
+    full_history_preservation_rate: float | None = Field(default=None, ge=0, le=1)
+    context_induced_regression_count: int = Field(ge=0)
+    recovery_count: int = Field(ge=0)
+    baseline_failure_count: int = Field(ge=0)
+    infra_failure_count: int = Field(ge=0)
+
+
+class RelativeStrategyMetrics(Schema):
+    strategy: str
+    planner: RelativeOutcomeMetrics
+    task: RelativeOutcomeMetrics
+
+
+class RelativeCaseDiagnostic(Schema):
+    case_id: str
+    strategy: str
+    planner_comparison: RelativeVerdict
+    task_comparison: RelativeVerdict
+    full_history_planner_verdict: OutcomeVerdict
+    current_planner_verdict: OutcomeVerdict
+    full_history_task_verdict: OutcomeVerdict
+    current_task_verdict: OutcomeVerdict
+    actual_tool_name: str | None = None
+    actual_arguments: dict[str, Any] | None = None
+    critical_retention: float = Field(ge=0, le=1)
+    protected_retention: float = Field(ge=0, le=1)
+    token_ratio: float = Field(ge=0, le=1)
+    retrieval_active: bool
+    failure_reason: str | None = None
+
+
 class AblationReport(Schema):
     mode: Literal["offline", "live"]
     holdout_sha256: str
@@ -132,6 +170,8 @@ class AblationReport(Schema):
     hard_gate_passed: bool
     hard_gate_failures: list[str] = Field(default_factory=list)
     experimental_targets: dict[str, bool | float | int]
+    relative_strategies: list[RelativeStrategyMetrics] = Field(default_factory=list)
+    case_diagnostics: list[RelativeCaseDiagnostic] = Field(default_factory=list)
 
 
 class _LookupInput(Schema):
@@ -333,12 +373,13 @@ def evaluate_context_ablation(
             retrieval.summary_input_tokens < retrieval.repeated_rebuild_counterfactual_tokens
         ),
     }
-    return AblationReport(
+    report = AblationReport(
         mode=mode, holdout_sha256=holdout_sha256, budget_tokens=budget_tokens, last_n=last_n,
         case_count=len(cases), strategies=strategies, runs=runs,
         hard_gate_passed=not hard_failures, hard_gate_failures=hard_failures,
         experimental_targets=targets,
     )
+    return _with_relative_full_history_analysis(report)
 
 
 def rescore_ablation_report(
@@ -381,11 +422,99 @@ def rescore_ablation_report(
             <= 1 / report.case_count
         ),
     })
-    return report.model_copy(update={
+    rescored = report.model_copy(update={
         "strategies": strategies,
         "runs": rescored_runs,
         "experimental_targets": targets,
     })
+    return _with_relative_full_history_analysis(rescored)
+
+
+def _with_relative_full_history_analysis(report: AblationReport) -> AblationReport:
+    full_by_case = {
+        run.case_id: run for run in report.runs if run.strategy == "full_history"
+    }
+    if len(full_by_case) != report.case_count:
+        raise ValueError("Ablation report must contain one Full History run per case")
+    diagnostics = []
+    for run in report.runs:
+        full = full_by_case[run.case_id]
+        full_planner = _planner_outcome(full)
+        current_planner = _planner_outcome(run)
+        full_task = _task_outcome(full)
+        current_task = _task_outcome(run)
+        diagnostics.append(RelativeCaseDiagnostic(
+            case_id=run.case_id,
+            strategy=run.strategy,
+            planner_comparison=_relative_verdict(full_planner, current_planner),
+            task_comparison=_relative_verdict(full_task, current_task),
+            full_history_planner_verdict=full_planner,
+            current_planner_verdict=current_planner,
+            full_history_task_verdict=full_task,
+            current_task_verdict=current_task,
+            actual_tool_name=run.actual_tool_name,
+            actual_arguments=run.actual_arguments,
+            critical_retention=run.critical_retention,
+            protected_retention=run.protected_retention,
+            token_ratio=run.compression_ratio,
+            retrieval_active=run.retrieval_active,
+            failure_reason=run.failure,
+        ))
+    relative = []
+    for strategy in STRATEGIES:
+        selected = [item for item in diagnostics if item.strategy == strategy]
+        relative.append(RelativeStrategyMetrics(
+            strategy=strategy,
+            planner=_relative_metrics([item.planner_comparison for item in selected]),
+            task=_relative_metrics([item.task_comparison for item in selected]),
+        ))
+    return report.model_copy(update={
+        "relative_strategies": relative,
+        "case_diagnostics": diagnostics,
+    })
+
+
+def _planner_outcome(run: AblationRun) -> OutcomeVerdict:
+    if _is_infra_failure(run.failure) and run.actual_tool_name is None:
+        return "infra_failure"
+    return "correct" if run.planner_semantic_correct else "incorrect"
+
+
+def _task_outcome(run: AblationRun) -> OutcomeVerdict:
+    if _is_infra_failure(run.failure):
+        return "infra_failure"
+    return "correct" if run.task_correct else "incorrect"
+
+
+def _is_infra_failure(failure: str | None) -> bool:
+    return failure is not None and (
+        failure.endswith("TimeoutError")
+        or failure.endswith("UnavailableError")
+        or failure.endswith("ResponseError")
+    )
+
+
+def _relative_verdict(full: OutcomeVerdict, current: OutcomeVerdict) -> RelativeVerdict:
+    if full == "infra_failure" or current == "infra_failure":
+        return "infra_failure"
+    if full == "correct":
+        return "preserved" if current == "correct" else "context_regression"
+    return "recovery" if current == "correct" else "baseline_failure"
+
+
+def _relative_metrics(verdicts: list[RelativeVerdict]) -> RelativeOutcomeMetrics:
+    preserved = verdicts.count("preserved")
+    regressions = verdicts.count("context_regression")
+    comparable_full_successes = preserved + regressions
+    return RelativeOutcomeMetrics(
+        full_history_preservation_rate=(
+            preserved / comparable_full_successes if comparable_full_successes else None
+        ),
+        context_induced_regression_count=regressions,
+        recovery_count=verdicts.count("recovery"),
+        baseline_failure_count=verdicts.count("baseline_failure"),
+        infra_failure_count=verdicts.count("infra_failure"),
+    )
 
 
 def _run_case(case, strategy, mode, budget, last_n, live_factories) -> AblationRun:

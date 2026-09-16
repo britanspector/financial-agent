@@ -349,6 +349,10 @@ Phase 5.4 的 12 条 holdout 与上述 15 条开发集分离，并以 SHA-256 `8
 
 Live scorer 同时报告 strict 与 semantic Planner accuracy。Strict 对完整参数对象逐字段精确比较；semantic 只对显式开放的 `topic` / `constraint` 使用有限 canonical alias，`entity`、日期、空值、键集合及其他结构仍严格比较。报告保存 synthetic actual tool/arguments，后续可不调用模型直接重算。当前固定 live 输出离线重算结果为：Full History strict/semantic `0%/40%`、Last-N `0%/0%`、Budgeted Selection `0%/20%`、Summary + Recent `0%/20%`、Summary + Retrieval `0%/40%`。本轮模型执行另有一条 Writer response failure 和一条 Verifier timeout；它们保留在 hard-gate failure 中，不通过修改 Context 参数或 holdout 隐藏。
 
+相对 Full History 的逐 case 分析将 Planner 与最终 Task 分开，并把 Provider/Writer/Verifier timeout、unavailable 和 response error 标为 `infra_failure`。Planner 在 Full History 正确的 2 条 case 上，Last-N preservation 为 0%（2 regressions），Budgeted Selection 与 Summary + Recent 均为 50%（各 1 regression），Summary + Retrieval 为 100%（0 regressions）；各策略 recovery 均为 0，另外 3 条均为 Full History baseline failure。最终 Task 的 Full History 没有成功 case，因此 preservation rate 为 `null` 而不是误导性的 100%；没有可归因于 Context 的 task regression，4 条是 baseline failure，现金流 case 受 Full History Writer failure 影响，Summary + Retrieval 另有一条 Verifier timeout。报告的 `case_diagnostics` 保存每条策略的双方 verdict、actual tool/arguments、retention、token ratio、retrieval active 和 failure reason。
+
+这批 live evidence 支持的结论是：在两个 Full History Planner 能正确完成的 case 上，Summary + Retrieval 没有引入 Planner regression，并明显优于 Last-N；它同时保持 100% critical/protected retention。不能支持的结论是：当前 5-case live slice 无法证明最终 Task accuracy、普遍优于 Full History，或达到 60% token ratio；Full History 自身有 3 条 Planner baseline failure，且 Task 层存在 infra failure。Phase 5 因而证明了 Context Manager 的确定性预算、grounding、增量摘要、检索恢复和相对 preservation 能力，不证明 Planner/Writer/Verifier 的整体业务正确率。
+
 `CompositeToolRegistry` / `merge_registries()` 仅按工具名路由到原有 User、Market、RAG Registry，不修改 Phase 1 `ToolRegistry` 的注册、校验、鉴权、审计或错误行为。完整运行时可通过 `build_agent_tools(settings)` 组合全部 9 个 Tool；对应的行情和 RAG Provider 仍要求环境变量凭证及已构建的 embedding index。
 
 ```python

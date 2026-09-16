@@ -42,6 +42,12 @@ def test_phase54_holdout_is_fixed_and_offline_hard_gates_pass():
     assert retrieval.summary_input_tokens < retrieval.repeated_rebuild_counterfactual_tokens
     # Experimental targets are always reported, but are not promoted to correctness gates.
     assert isinstance(report.experimental_targets["history_token_ratio_le_0_60"], bool)
+    relative = {item.strategy: item for item in report.relative_strategies}
+    assert relative["summary_retrieval"].planner.full_history_preservation_rate == 1
+    assert relative["summary_retrieval"].planner.context_induced_regression_count == 0
+    assert relative["summary_retrieval"].planner.recovery_count == 0
+    assert relative["last_n"].planner.context_induced_regression_count == 12
+    assert len(report.case_diagnostics) == 12 * 5
 
 
 def test_semantic_scorer_maps_open_topic_but_keeps_structured_fields_strict():
@@ -100,3 +106,30 @@ def test_report_can_be_rescored_from_persisted_actual_arguments_without_model_ca
 
     assert not rescored_run.planner_strict_correct
     assert rescored_run.planner_semantic_correct
+
+
+def test_relative_analysis_separates_planner_success_from_downstream_infra_failure():
+    cases = load_ablation_cases(HOLDOUT)
+    report = evaluate_context_ablation(cases, holdout_sha256=EXPECTED_SHA256)
+    case = cases[0]
+    target_index = next(
+        index for index, run in enumerate(report.runs)
+        if run.case_id == case.case_id and run.strategy == "last_n"
+    )
+    run = report.runs[target_index]
+    runs = list(report.runs)
+    runs[target_index] = run.model_copy(update={
+        "actual_tool_name": "lookup_financial_fact",
+        "actual_arguments": case.expected_arguments,
+        "failure": "AnswerProviderResponseError",
+    })
+
+    rescored = rescore_ablation_report(report.model_copy(update={"runs": runs}), cases)
+    diagnostic = next(
+        item for item in rescored.case_diagnostics
+        if item.case_id == case.case_id and item.strategy == "last_n"
+    )
+
+    assert diagnostic.planner_comparison == "preserved"
+    assert diagnostic.task_comparison == "infra_failure"
+    assert diagnostic.failure_reason == "AnswerProviderResponseError"

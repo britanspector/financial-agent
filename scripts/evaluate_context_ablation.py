@@ -63,6 +63,12 @@ def main() -> None:
             "case_count": report.case_count,
             "rescored_without_model_calls": True,
             "strategies": [item.model_dump(mode="json") for item in report.strategies],
+            "relative_strategies": [
+                item.model_dump(mode="json") for item in report.relative_strategies
+            ],
+            "case_diagnostics": [
+                item.model_dump(mode="json") for item in report.case_diagnostics
+            ],
         }, ensure_ascii=False, indent=2))
         return
     factories = None
@@ -103,6 +109,9 @@ def main() -> None:
         "hard_gate_failures": report.hard_gate_failures,
         "experimental_targets": report.experimental_targets,
         "strategies": [item.model_dump(mode="json") for item in report.strategies],
+        "relative_strategies": [
+            item.model_dump(mode="json") for item in report.relative_strategies
+        ],
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     if args.json_report:

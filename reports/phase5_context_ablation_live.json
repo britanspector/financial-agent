@@ -929,5 +929,627 @@
     "task_accuracy_within_one_case_of_full": true,
     "planner_accuracy_within_one_case_of_full": true,
     "incremental_input_below_rebuild_counterfactual": false
-  }
+  },
+  "relative_strategies": [
+    {
+      "strategy": "full_history",
+      "planner": {
+        "full_history_preservation_rate": 1.0,
+        "context_induced_regression_count": 0,
+        "recovery_count": 0,
+        "baseline_failure_count": 3,
+        "infra_failure_count": 0
+      },
+      "task": {
+        "full_history_preservation_rate": null,
+        "context_induced_regression_count": 0,
+        "recovery_count": 0,
+        "baseline_failure_count": 4,
+        "infra_failure_count": 1
+      }
+    },
+    {
+      "strategy": "last_n",
+      "planner": {
+        "full_history_preservation_rate": 0.0,
+        "context_induced_regression_count": 2,
+        "recovery_count": 0,
+        "baseline_failure_count": 3,
+        "infra_failure_count": 0
+      },
+      "task": {
+        "full_history_preservation_rate": null,
+        "context_induced_regression_count": 0,
+        "recovery_count": 0,
+        "baseline_failure_count": 4,
+        "infra_failure_count": 1
+      }
+    },
+    {
+      "strategy": "budgeted_selection",
+      "planner": {
+        "full_history_preservation_rate": 0.5,
+        "context_induced_regression_count": 1,
+        "recovery_count": 0,
+        "baseline_failure_count": 3,
+        "infra_failure_count": 0
+      },
+      "task": {
+        "full_history_preservation_rate": null,
+        "context_induced_regression_count": 0,
+        "recovery_count": 0,
+        "baseline_failure_count": 4,
+        "infra_failure_count": 1
+      }
+    },
+    {
+      "strategy": "summary_compression",
+      "planner": {
+        "full_history_preservation_rate": 0.5,
+        "context_induced_regression_count": 1,
+        "recovery_count": 0,
+        "baseline_failure_count": 3,
+        "infra_failure_count": 0
+      },
+      "task": {
+        "full_history_preservation_rate": null,
+        "context_induced_regression_count": 0,
+        "recovery_count": 0,
+        "baseline_failure_count": 4,
+        "infra_failure_count": 1
+      }
+    },
+    {
+      "strategy": "summary_retrieval",
+      "planner": {
+        "full_history_preservation_rate": 1.0,
+        "context_induced_regression_count": 0,
+        "recovery_count": 0,
+        "baseline_failure_count": 3,
+        "infra_failure_count": 0
+      },
+      "task": {
+        "full_history_preservation_rate": null,
+        "context_induced_regression_count": 0,
+        "recovery_count": 0,
+        "baseline_failure_count": 3,
+        "infra_failure_count": 2
+      }
+    }
+  ],
+  "case_diagnostics": [
+    {
+      "case_id": "holdout_portfolio_identity",
+      "strategy": "full_history",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": null,
+      "actual_arguments": null,
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_portfolio_identity",
+      "strategy": "last_n",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": null,
+      "actual_arguments": null,
+      "critical_retention": 0.0,
+      "protected_retention": 0.0,
+      "token_ratio": 0.5617283950617284,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_portfolio_identity",
+      "strategy": "budgeted_selection",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": null,
+      "actual_arguments": null,
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 0.8024691358024691,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_portfolio_identity",
+      "strategy": "summary_compression",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": null,
+      "actual_arguments": null,
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 0.8641975308641975,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_portfolio_identity",
+      "strategy": "summary_retrieval",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": null,
+      "actual_arguments": null,
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 0.8518518518518519,
+      "retrieval_active": true,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_assistant_cashflow",
+      "strategy": "full_history",
+      "planner_comparison": "preserved",
+      "task_comparison": "infra_failure",
+      "full_history_planner_verdict": "correct",
+      "current_planner_verdict": "correct",
+      "full_history_task_verdict": "infra_failure",
+      "current_task_verdict": "infra_failure",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "现金流断裂风险",
+        "entity": "霁川能源",
+        "start_date": null,
+        "end_date": null,
+        "constraint": null
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": "AnswerProviderResponseError"
+    },
+    {
+      "case_id": "holdout_assistant_cashflow",
+      "strategy": "last_n",
+      "planner_comparison": "context_regression",
+      "task_comparison": "infra_failure",
+      "full_history_planner_verdict": "correct",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "infra_failure",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": null,
+      "actual_arguments": null,
+      "critical_retention": 0.0,
+      "protected_retention": 1.0,
+      "token_ratio": 0.564935064935065,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_assistant_cashflow",
+      "strategy": "budgeted_selection",
+      "planner_comparison": "preserved",
+      "task_comparison": "infra_failure",
+      "full_history_planner_verdict": "correct",
+      "current_planner_verdict": "correct",
+      "full_history_task_verdict": "infra_failure",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "现金流断裂风险",
+        "entity": "霁川能源",
+        "start_date": null,
+        "end_date": null,
+        "constraint": null
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_assistant_cashflow",
+      "strategy": "summary_compression",
+      "planner_comparison": "preserved",
+      "task_comparison": "infra_failure",
+      "full_history_planner_verdict": "correct",
+      "current_planner_verdict": "correct",
+      "full_history_task_verdict": "infra_failure",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "现金流断裂风险",
+        "entity": "霁川能源",
+        "start_date": null,
+        "end_date": null,
+        "constraint": null
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_assistant_cashflow",
+      "strategy": "summary_retrieval",
+      "planner_comparison": "preserved",
+      "task_comparison": "infra_failure",
+      "full_history_planner_verdict": "correct",
+      "current_planner_verdict": "correct",
+      "full_history_task_verdict": "infra_failure",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "现金流断裂风险",
+        "entity": "霁川能源",
+        "start_date": null,
+        "end_date": null,
+        "constraint": null
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_corrected_date",
+      "strategy": "full_history",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "研究资料",
+        "entity": "临港材料",
+        "start_date": null,
+        "end_date": "2026-07-15",
+        "constraint": "结果按时间倒序，摘要不超过三段"
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_corrected_date",
+      "strategy": "last_n",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": null,
+      "actual_arguments": null,
+      "critical_retention": 0.0,
+      "protected_retention": 0.0,
+      "token_ratio": 0.5290322580645161,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_corrected_date",
+      "strategy": "budgeted_selection",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "研究资料",
+        "entity": "临港材料",
+        "start_date": null,
+        "end_date": "2026-07-15",
+        "constraint": "结果按时间倒序，摘要不超过三段"
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_corrected_date",
+      "strategy": "summary_compression",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "研究资料",
+        "entity": "临港材料",
+        "start_date": null,
+        "end_date": "2026-07-15",
+        "constraint": "结果按时间倒序，摘要不超过三段"
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_corrected_date",
+      "strategy": "summary_retrieval",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "研究资料",
+        "entity": "临港材料",
+        "start_date": null,
+        "end_date": "2026-07-15",
+        "constraint": "结果按时间倒序，摘要不超过三段"
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_constraint_reversal",
+      "strategy": "full_history",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "行情",
+        "entity": "远岑科技",
+        "start_date": null,
+        "end_date": null,
+        "constraint": "最新"
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_constraint_reversal",
+      "strategy": "last_n",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "最新约束查询",
+        "entity": "远岑科技",
+        "start_date": null,
+        "end_date": null,
+        "constraint": "最新"
+      },
+      "critical_retention": 0.5,
+      "protected_retention": 0.0,
+      "token_ratio": 0.5231788079470199,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_constraint_reversal",
+      "strategy": "budgeted_selection",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "行情",
+        "entity": "远岑科技",
+        "start_date": null,
+        "end_date": null,
+        "constraint": "最新"
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_constraint_reversal",
+      "strategy": "summary_compression",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "行情",
+        "entity": "远岑科技",
+        "start_date": null,
+        "end_date": null,
+        "constraint": "最新"
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_constraint_reversal",
+      "strategy": "summary_retrieval",
+      "planner_comparison": "baseline_failure",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "incorrect",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "行情",
+        "entity": "远岑科技",
+        "start_date": null,
+        "end_date": null,
+        "constraint": "最新"
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_long_recent_noise",
+      "strategy": "full_history",
+      "planner_comparison": "preserved",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "correct",
+      "current_planner_verdict": "correct",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "资本开支敏感性结论",
+        "entity": "陵川精工",
+        "start_date": null,
+        "end_date": null,
+        "constraint": null
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 1.0,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_long_recent_noise",
+      "strategy": "last_n",
+      "planner_comparison": "context_regression",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "correct",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "资本开支敏感性结论",
+        "entity": "用户历史讨论中的实体",
+        "start_date": null,
+        "end_date": null,
+        "constraint": "回到最早的结论"
+      },
+      "critical_retention": 0.0,
+      "protected_retention": 1.0,
+      "token_ratio": 0.6636771300448431,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_long_recent_noise",
+      "strategy": "budgeted_selection",
+      "planner_comparison": "context_regression",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "correct",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "资本开支敏感性结论",
+        "entity": "公司",
+        "start_date": null,
+        "end_date": null,
+        "constraint": "回到最早的结论"
+      },
+      "critical_retention": 0.0,
+      "protected_retention": 1.0,
+      "token_ratio": 0.6636771300448431,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_long_recent_noise",
+      "strategy": "summary_compression",
+      "planner_comparison": "context_regression",
+      "task_comparison": "baseline_failure",
+      "full_history_planner_verdict": "correct",
+      "current_planner_verdict": "incorrect",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "incorrect",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "资本开支敏感性结论",
+        "entity": "陵川精工",
+        "start_date": null,
+        "end_date": null,
+        "constraint": "最早的"
+      },
+      "critical_retention": 0.5,
+      "protected_retention": 1.0,
+      "token_ratio": 0.7174887892376681,
+      "retrieval_active": false,
+      "failure_reason": null
+    },
+    {
+      "case_id": "holdout_long_recent_noise",
+      "strategy": "summary_retrieval",
+      "planner_comparison": "preserved",
+      "task_comparison": "infra_failure",
+      "full_history_planner_verdict": "correct",
+      "current_planner_verdict": "correct",
+      "full_history_task_verdict": "incorrect",
+      "current_task_verdict": "infra_failure",
+      "actual_tool_name": "lookup_financial_fact",
+      "actual_arguments": {
+        "topic": "资本开支敏感性结论",
+        "entity": "陵川精工",
+        "start_date": null,
+        "end_date": null,
+        "constraint": null
+      },
+      "critical_retention": 1.0,
+      "protected_retention": 1.0,
+      "token_ratio": 0.6188340807174888,
+      "retrieval_active": true,
+      "failure_reason": "VerifierProviderTimeoutError"
+    }
+  ]
 }
