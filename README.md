@@ -2,7 +2,7 @@
 
 用于深度学习和求职展示的本地多工具 Agent 工程探索。全部用户数据为 synthetic，不连接真实公司内部系统。
 
-**当前阶段：Phase 5 已完成。** 项目现在用统一的 Context Manager 为 Planner、Answer Writer 和 Verifier 控制历史长度，并支持“最近对话 + 稳定摘要 + 相关历史检索”。默认仍使用兼容旧行为的 `full_history`；需要摘要或检索时必须显式开启。
+**当前阶段：Phase 6.1 已完成。** 项目已具备完全离线、确定性的 Agent E2E Eval Harness，可从用户 Query 一直验证到最终答案，并覆盖 Context、Planner、执行图、Retry、Writer、Verifier、Replan/Rewrite 和共享 Tool budget。Phase 5 的 Context Manager 策略与默认 `full_history` 行为保持不变。
 
 ## 项目结构与依赖
 
@@ -28,6 +28,7 @@ financial-agent/
 │   └── market_data/            # REST Provider、Tool 与 live test
 ├── eval/planner/                # 与 prompt/source 解耦的固定 Planner Eval JSONL
 ├── eval/loop/                   # 15 条离线闭环黑盒验收场景
+├── eval/agent_e2e/              # 12 条 Phase 6.1 全链路固定场景与独立评分 gold
 ├── eval/context/                # 15 条 Phase 5.3 Context Selection baseline
 ├── eval/context_ablation/       # 12 条只用于 Phase 5.4 验收的固定 holdout
 └── data/
@@ -259,6 +260,21 @@ Answer Writer 由 `FINANCIAL_AGENT_ANSWER_MODEL`、`FINANCIAL_AGENT_ANSWER_BASE_
 ```
 
 2026-09-15 本机闭环验收结果为 15/15 通过；REWRITE audit 确认 Tool 调用数不变且传入 Writer 的 Result snapshot 未变化。
+
+## Agent E2E Eval Harness
+
+Phase 6.1 新增 `eval/agent_e2e/` 固定评测集。它通过真实 Structured Planner、Plan Validator、LangGraph execution、Binding、Retry、Answer Writer、Structured Verifier、Replan/Rewrite 和 Context Manager 运行 12 条完整场景；9 个 Tool 使用正式公共 input/output schema，底层 User/Market/Knowledge Service 或 Provider 使用完全离线的 synthetic fixture。模型边界使用检查必要 prompt 片段的确定性 replay provider，场景脚本与评分 gold 分文件保存，避免 scorer 从 provider 输出反推答案。
+
+覆盖一次成功、并行与跨域 Tool、timeout/限流 Retry、缺失 Plan 的 Replan、错误初始 Tool 后恢复、Rewrite、两类长历史 retrieval、持仓到行情的 Binding，以及共享预算耗尽。预算失败场景显式设置 `total_tool_budget=4`：第一轮 Retry 消耗 2 次，第二轮失败与 Retry 再消耗 2 次，第三次 Replan 在新 Tool 启动前以 `total_tool_budget` 停止，不通过堆积 Task 消耗默认 36 次预算。
+
+聚合报告只保留 Task Success Rate、Final Answer Correctness、Tool Selection Accuracy、Unnecessary Tool Call Rate、Replan Recovery Rate、Average Tool Attempts 和 Loop Iterations。Tool Selection 按整轮真正进入 Registry 的 schema-normalized 逻辑 Tool 集评分，Retry 重复 attempt 去重；故意错误的初始 Plan 可以最终成功，同时降低 Tool Selection Accuracy 并产生 unnecessary call。这两个效率指标不作为 12 条场景必须达到完美值的硬门禁。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_agent_e2e.py
+.\.venv\Scripts\python.exe scripts\evaluate_agent_e2e.py --json-report reports/phase6_agent_e2e.json
+```
+
+Harness 仅记录 scorer 必需的 Plan/Replan 输出、规范化 Tool 调用、Context retrieval message indexes 和最终 `AgentLoopResult`，不建设通用 Observability 或持久化 AgentRunTrace。离线 replay 可以证明全链路集成、预算语义和 scorer 可复现，但不能替代真实模型准确率评测；完整 trace 与 live benchmark 留待 Phase 6.2。
 
 ## Context Manager
 
@@ -521,6 +537,7 @@ registry = register_user_tools(UserDataService(
 - Phase 4.2（2026-09-13）：265 个默认测试通过；Structured Verifier 覆盖结构化判定、确定性失败清单、共享 Result Path、输入一致性、Provider 错误和四项边界 Eval 指标；真实 Qwen Eval 独立使用 `-m live` 或脚本运行。
 - Phase 4.3（2026-09-15）：293 个默认测试通过，15/15 固定 Loop Eval 通过；闭环覆盖 PASS/REWRITE/REPLAN 路由、完整替换计划、success/empty 复用、force rerun、error 不复用、旧结果裁剪、依赖安全失效、跨轮共享 Tool attempt 预算和 no-progress 三条件判定。
 - Phase 5（2026-09-16）：Context Manager、增量稳定摘要、本地历史检索和独立 holdout ablation 完成；离线硬门禁通过，live 报告按 Full History 基线区分 Context regression、baseline failure 和 infra failure。
+- Phase 6.1（2026-09-16）：369 个默认测试和 2 个 integration tests 通过；12/12 固定 Agent E2E 场景通过。Task Success、Final Answer Correctness 和 Replan Recovery 均为 1.0000，Tool Selection Accuracy 为 0.9167，Unnecessary Tool Call Rate 为 0.0556，Average Tool Attempts 为 1.8333，Loop Iterations 为 1.3333。
 - 覆盖四个业务 Tool、FastAPI endpoint、Async HTTP Client、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
 - Market Data 测试使用 `httpx.MockTransport`，不访问 live provider；live smoke test 使用 `pytest -m live` 单独运行。
 
@@ -541,6 +558,7 @@ registry = register_user_tools(UserDataService(
 - Provider 解耦的 Structured Verifier、严格 PASS/REWRITE/REPLAN schema、确定性 failed_task_ids 和固定 Verifier Eval Set。
 - Verifier 驱动的有界 Agent Loop、证据约束 Answer Writer、完整 Replan、依赖安全结果复用、显式 force rerun 和跨轮 Tool attempt 总预算。
 - Planner、Writer、Verifier 共用的 Context Manager、五种 history 策略、Incremental Stable Summary、本地 BM25 history retrieval、弹性预算、安全指标及可注入 estimator/provider/retriever。
+- 完全离线的 Agent E2E Eval Harness：真实 9 Tool 契约、全链路 Retry/Replan/Rewrite/Binding/Context、结构化答案与证据评分，以及七项固定聚合指标。
 - Prompt-independent 的 40 条 Planner Eval Set：单/并行/依赖、三源组合、当前/历史时间、RAG filters、法规、FAQ、无关 Tool 与 abstain 边界，以及六项离线/真实模型通用指标。
 
 ## 已知限制
@@ -555,10 +573,11 @@ registry = register_user_tools(UserDataService(
 - Market Data v0.1 已提供同步 Tushare REST Provider；120 积分下尚无指数、复权、实时行情、分钟线、Level-2、新闻、资金流或指标库。
 - 当前为同步本地访问；审计没有多进程并发保证、轮转或防篡改能力。日志不是通用敏感数据脱敏器。
 - Context budget 只覆盖 history，尚不覆盖 query、tools、plan、Tool Results、draft 或 feedback；history retrieval 仍无 embedding/reranker，Summary 增量更新只支持 additions/replacements 且不跨进程持久化；`summary_prefix_stability_ratio` 不是 Provider cache hit 指标，也不提供长期 Memory、精确 tokenizer 或 KV Cache 优化。
+- Phase 6.1 使用确定性 replay provider 和 synthetic Service/Provider fixture，只证明链路、预算语义与 scorer 可复现；不代表真实模型生产准确率。Recording wrappers 不是完整 Observability，也不提供持久化 AgentRunTrace。
 - 依赖只有兼容范围，未锁定全部传递依赖；只在当前 Windows 环境验证。
 
 ## 下一步
 
-Phase 5 已结束。下一阶段可考虑语义检索、完整 prompt/token/cost 预算和循环 trace 持久化。长期 Memory、跨会话持久化和 Agentic RL 不属于 Phase 5。
+Phase 6.1 已结束。Phase 6.2 可增加真实模型 benchmark、完整 AgentRunTrace 和更系统的失败归因；这些能力不提前放入当前最小 E2E scorer。长期 Memory、跨会话持久化和 Agentic RL 仍不在当前范围内。
 
 后续工程约束：外部模型和数据源必须经 adapter/registry，LangGraph node 不直接依赖 provider SDK；API key 仅由环境配置注入；所有用户数据为 synthetic；每个功能补测试，并同步更新 README 的“当前能力 / 已知限制 / 下一步”。
