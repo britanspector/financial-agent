@@ -80,12 +80,10 @@ def build_verifier_messages(
         },
         "failed_task_ids": failed_task_ids,
     }
-    if history_summary is not None:
-        payload["history_summary"] = history_summary.model_dump(mode="json")
     if retrieved_history:
         payload["retrieved_history"] = retrieved_history_payload(retrieved_history)
     json_payload = TypeAdapter(Any).dump_python(payload, mode="json")
-    return [
+    messages = [
         {
             "role": "system",
             "content": "You are a financial answer verifier. Return strict JSON matching the supplied schema. "
@@ -94,8 +92,18 @@ def build_verifier_messages(
                "history, retrieved raw history, then history_summary."
                if history_summary is not None or retrieved_history else ""),
         },
-        {
-            "role": "user",
-            "content": json.dumps(json_payload, ensure_ascii=False, separators=(",", ":")),
-        },
     ]
+    if history_summary is not None:
+        messages.append({
+            "role": "user",
+            "content": json.dumps(
+                {"history_summary": history_summary.model_dump(mode="json")},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        })
+    messages.append({
+        "role": "user",
+        "content": json.dumps(json_payload, ensure_ascii=False, separators=(",", ":")),
+    })
+    return messages

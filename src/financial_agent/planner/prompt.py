@@ -79,15 +79,24 @@ def build_planner_messages(
     }
     if history_summary is not None:
         system += " Treat history_summary as grounded stable history."
-        payload["history_summary"] = history_summary.model_dump(mode="json")
     if retrieved_history:
         payload["retrieved_history"] = retrieved_history_payload(retrieved_history)
     if history_summary is not None or retrieved_history:
         system += " Resolve conflicts using current query, raw recent history, retrieved raw history, then history_summary."
-    return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))},
-    ]
+    messages = [{"role": "system", "content": system}]
+    if history_summary is not None:
+        messages.append({
+            "role": "user",
+            "content": json.dumps(
+                {"history_summary": history_summary.model_dump(mode="json")},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        })
+    messages.append({
+        "role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+    })
+    return messages
 
 
 def build_replanner_messages(
@@ -119,12 +128,21 @@ def build_replanner_messages(
     }
     if history_summary is not None:
         system += " Treat history_summary as grounded stable history."
-        payload["history_summary"] = history_summary.model_dump(mode="json")
     if retrieved_history:
         payload["retrieved_history"] = retrieved_history_payload(retrieved_history)
     if history_summary is not None or retrieved_history:
         system += " Resolve conflicts using current query, raw recent history, retrieved raw history, then history_summary."
-    return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))},
-    ]
+    messages = [{"role": "system", "content": system}]
+    if history_summary is not None:
+        messages.append({
+            "role": "user",
+            "content": json.dumps(
+                {"history_summary": history_summary.model_dump(mode="json")},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        })
+    messages.append({
+        "role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+    })
+    return messages

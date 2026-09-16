@@ -9,6 +9,7 @@ import json
 from collections import OrderedDict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from math import ceil
 from threading import Lock
 
 from financial_agent.context.models import (
@@ -71,6 +72,30 @@ class _ContextParts:
     retrieval_fallback_reason: str | None = None
     protected_count: int = 0
     protected_covered_count: int = 0
+    summary_provider_call_count: int = 0
+    summary_rebuild_count: int = 0
+    summary_incremental_update_count: int = 0
+    summary_input_tokens: int = 0
+    summary_prefix_stability_ratio: float | None = None
+
+
+@dataclass(frozen=True)
+class _SummaryCacheEntry:
+    summary: HistorySummary
+    messages: tuple[tuple[int, Message], ...]
+    fingerprints: tuple[str, ...]
+
+
+@dataclass
+class _SummaryBuildOutcome:
+    summary: HistorySummary | None = None
+    cache_hit: bool = False
+    error_reason: str | None = None
+    provider_call_count: int = 0
+    rebuild_count: int = 0
+    incremental_update_count: int = 0
+    input_tokens: int = 0
+    prefix_stability_ratio: float | None = None
 
 
 class ContextManager:
@@ -88,7 +113,7 @@ class ContextManager:
         self._summarizer = summarizer
         self._retriever = retriever or LexicalHistoryRetriever()
         self._summary_cache_size = summary_cache_size
-        self._summary_cache: OrderedDict[str, HistorySummary] = OrderedDict()
+        self._summary_cache: OrderedDict[str, _SummaryCacheEntry] = OrderedDict()
         self._cache_lock = Lock()
 
     def select(
@@ -142,6 +167,11 @@ class ContextManager:
             retrieval_fallback_reason=parts.retrieval_fallback_reason,
             protected_fact_count=parts.protected_count,
             protected_fact_covered_count=parts.protected_covered_count,
+            summary_provider_call_count=parts.summary_provider_call_count,
+            summary_rebuild_count=parts.summary_rebuild_count,
+            summary_incremental_update_count=parts.summary_incremental_update_count,
+            summary_input_tokens=parts.summary_input_tokens,
+            summary_prefix_stability_ratio=parts.summary_prefix_stability_ratio,
         )
         logger.info(
             "context_selection component=%s strategy=%s budget_tokens=%d original_tokens=%d "
@@ -150,7 +180,9 @@ class ContextManager:
             "summary_fact_count=%d summary_tokens=%d summary_fallback_reason=%s "
             "retrieval_active=%s retrieval_candidate_turn_count=%d retrieval_eligible_turn_count=%d "
             "retrieved_turn_count=%d retrieved_message_count=%d retrieved_tokens=%d recent_message_count=%d "
-            "retrieval_fallback_reason=%s protected_fact_count=%d protected_fact_covered_count=%d",
+            "retrieval_fallback_reason=%s protected_fact_count=%d protected_fact_covered_count=%d "
+            "summary_provider_call_count=%d summary_rebuild_count=%d summary_incremental_update_count=%d "
+            "summary_input_tokens=%d summary_prefix_stability_ratio=%s",
             metrics.component,
             metrics.strategy,
             metrics.budget_tokens,
@@ -176,6 +208,12 @@ class ContextManager:
             metrics.retrieval_fallback_reason or "none",
             metrics.protected_fact_count,
             metrics.protected_fact_covered_count,
+            metrics.summary_provider_call_count,
+            metrics.summary_rebuild_count,
+            metrics.summary_incremental_update_count,
+            metrics.summary_input_tokens,
+            (f"{metrics.summary_prefix_stability_ratio:.6f}"
+             if metrics.summary_prefix_stability_ratio is not None else "none"),
         )
         return ContextSelection(
             request=UserQuery(
@@ -216,36 +254,23 @@ class ContextManager:
         if not summarized:
             return self._summary_fallback(request, policy, "empty_summary")
 
-        key = _summary_cache_key(self._summarizer.cache_discriminator, summarized)
-        cached = self._cache_get(key)
-        cache_hit = cached is not None
-        try:
-            complete = cached or self._summarizer.summarize(summarized)
-        except ProtectedFactMissingError:
+        outcome = self._build_summary(
+            summarized, incremental_enabled=policy.summary_incremental_enabled,
+        )
+        complete = outcome.summary
+        if complete is None:
             return self._summary_fallback(
-                request, policy, "protected_fact_missing", summarized_count=len(summarized),
+                request, policy, outcome.error_reason or "invalid_summary",
+                summarized_count=len(summarized), outcome=outcome,
             )
-        except InvalidHistorySummaryError:
-            return self._summary_fallback(
-                request, policy, "invalid_summary", summarized_count=len(summarized),
-            )
-        except SummaryProviderError:
-            return self._summary_fallback(
-                request, policy, "provider_error", summarized_count=len(summarized),
-            )
-        if not complete.facts:
-            return self._summary_fallback(
-                request, policy, "empty_summary", summarized_count=len(summarized),
-            )
-        if cached is None:
-            self._cache_put(key, complete)
 
         raw_messages = [message for _, message in raw]
         active_complete = _filter_stale_summary(complete, summarized, raw)
         packed = self._pack_summary(active_complete, raw_messages, summarized, raw, policy.budget_tokens)
         if packed is None:
             return self._summary_fallback(
-                request, policy, "over_budget", summarized_count=len(summarized), cache_hit=cache_hit,
+                request, policy, "over_budget", summarized_count=len(summarized),
+                outcome=outcome,
             )
         summarized_indexes = {index for index, _ in summarized}
         protected = [
@@ -255,11 +280,11 @@ class ContextManager:
         if any(not _protected_covered(item, packed) for item in protected):
             return self._summary_fallback(
                 request, policy, "protected_fact_missing",
-                summarized_count=len(summarized), cache_hit=cache_hit,
+                summarized_count=len(summarized), cache_hit=outcome.cache_hit, outcome=outcome,
             )
-        return _ContextParts(
-            raw_messages, packed, cache_hit=cache_hit, summarized_count=len(summarized),
-        )
+        return self._apply_summary_outcome(_ContextParts(
+            raw_messages, packed, cache_hit=outcome.cache_hit, summarized_count=len(summarized),
+        ), outcome)
 
     def _pack_summary(
         self,
@@ -306,16 +331,30 @@ class ContextManager:
 
     def _summary_fallback(
         self, request, policy, reason, *, summarized_count: int = 0, cache_hit: bool = False,
+        outcome: _SummaryBuildOutcome | None = None,
     ):
         selected = self._budgeted_selection(request.query, request.history, policy.budget_tokens)
-        return _ContextParts(
+        parts = _ContextParts(
             selected,
-            cache_hit=cache_hit,
+            cache_hit=outcome.cache_hit if outcome else cache_hit,
             summarized_count=summarized_count,
             summary_fallback_reason=reason,
         )
+        return self._apply_summary_outcome(parts, outcome) if outcome else parts
 
-    def _cache_get(self, key: str) -> HistorySummary | None:
+    @staticmethod
+    def _apply_summary_outcome(
+        parts: _ContextParts,
+        outcome: _SummaryBuildOutcome,
+    ) -> _ContextParts:
+        parts.summary_provider_call_count = outcome.provider_call_count
+        parts.summary_rebuild_count = outcome.rebuild_count
+        parts.summary_incremental_update_count = outcome.incremental_update_count
+        parts.summary_input_tokens = outcome.input_tokens
+        parts.summary_prefix_stability_ratio = outcome.prefix_stability_ratio
+        return parts
+
+    def _cache_get(self, key: str) -> _SummaryCacheEntry | None:
         with self._cache_lock:
             item = self._summary_cache.get(key)
             if item is not None:
@@ -323,14 +362,128 @@ class ContextManager:
                 return item
         return None
 
-    def _cache_put(self, key: str, summary: HistorySummary) -> None:
+    def _cache_put(
+        self,
+        key: str,
+        summary: HistorySummary,
+        messages: Sequence[tuple[int, Message]],
+    ) -> None:
         if self._summary_cache_size <= 0:
             return
+        entry = _SummaryCacheEntry(
+            summary=summary,
+            messages=tuple(messages),
+            fingerprints=_message_fingerprints(messages),
+        )
         with self._cache_lock:
-            self._summary_cache[key] = summary
+            self._summary_cache[key] = entry
             self._summary_cache.move_to_end(key)
             while len(self._summary_cache) > self._summary_cache_size:
                 self._summary_cache.popitem(last=False)
+
+    def _cache_longest_prefix(
+        self,
+        messages: Sequence[tuple[int, Message]],
+    ) -> _SummaryCacheEntry | None:
+        target = _message_fingerprints(messages)
+        with self._cache_lock:
+            candidates = [
+                entry for entry in self._summary_cache.values()
+                if len(entry.fingerprints) < len(target)
+                and target[:len(entry.fingerprints)] == entry.fingerprints
+            ]
+            if not candidates:
+                return None
+            entry = max(candidates, key=lambda item: len(item.fingerprints))
+            key = next(key for key, value in self._summary_cache.items() if value is entry)
+            self._summary_cache.move_to_end(key)
+            return entry
+
+    def _build_summary(
+        self,
+        summarized: Sequence[tuple[int, Message]],
+        *,
+        incremental_enabled: bool,
+    ) -> _SummaryBuildOutcome:
+        if self._summarizer is None:
+            return _SummaryBuildOutcome(error_reason="invalid_summary")
+        key = _summary_cache_key(self._summarizer.cache_discriminator, summarized)
+        exact = self._cache_get(key)
+        if exact is not None:
+            return _SummaryBuildOutcome(
+                summary=exact.summary,
+                cache_hit=True,
+                prefix_stability_ratio=1.0,
+            )
+
+        ancestor = self._cache_longest_prefix(summarized) if incremental_enabled else None
+        outcome = _SummaryBuildOutcome()
+        if ancestor is not None:
+            newly_aged_out = list(summarized[len(ancestor.messages):])
+            outcome.provider_call_count += 1
+            outcome.incremental_update_count += 1
+            outcome.input_tokens += _estimate_summary_prompt_tokens(
+                self._summarizer.incremental_messages(ancestor.summary, newly_aged_out)
+            )
+            try:
+                updated = self._summarizer.update(
+                    ancestor.summary, ancestor.messages, newly_aged_out,
+                )
+                if not updated.facts:
+                    raise InvalidHistorySummaryError("Incremental summary is empty")
+                outcome.summary = updated
+                outcome.prefix_stability_ratio = self._summary_prefix_stability(
+                    ancestor.summary, updated,
+                )
+                self._cache_put(key, updated, summarized)
+                return outcome
+            except (ProtectedFactMissingError, InvalidHistorySummaryError, SummaryProviderError):
+                pass
+
+        outcome.provider_call_count += 1
+        outcome.rebuild_count += 1
+        outcome.input_tokens += _estimate_summary_prompt_tokens(
+            self._summarizer.rebuild_messages(summarized)
+        )
+        try:
+            rebuilt = self._summarizer.summarize(summarized)
+        except ProtectedFactMissingError:
+            outcome.error_reason = "protected_fact_missing"
+            return outcome
+        except InvalidHistorySummaryError:
+            outcome.error_reason = "invalid_summary"
+            return outcome
+        except SummaryProviderError:
+            outcome.error_reason = "provider_error"
+            return outcome
+        if not rebuilt.facts:
+            outcome.error_reason = "empty_summary"
+            return outcome
+        outcome.summary = rebuilt
+        outcome.prefix_stability_ratio = (
+            self._summary_prefix_stability(ancestor.summary, rebuilt) if ancestor else 0.0
+        )
+        self._cache_put(key, rebuilt, summarized)
+        return outcome
+
+    def _summary_prefix_stability(
+        self,
+        previous: HistorySummary,
+        current: HistorySummary,
+    ) -> float:
+        common: list[SummaryFact] = []
+        for old, new in zip(previous.facts, current.facts):
+            if old != new:
+                break
+            common.append(new)
+        current_tokens = self._estimator.estimate_messages([_summary_message(current)])
+        if current_tokens == 0:
+            return 1.0
+        stable_tokens = (
+            self._estimator.estimate_messages([_summary_message(HistorySummary(facts=common))])
+            if common else 0
+        )
+        return min(1.0, stable_tokens / current_tokens)
 
     def _summary_retrieval(self, request: UserQuery, policy: ContextPolicy) -> _ContextParts:
         if self._estimator.estimate_messages(request.history) <= policy.budget_tokens:
@@ -355,29 +508,14 @@ class ContextManager:
             for index, message in zip(turn.message_indexes, turn.messages)
         ]
 
-        complete_summary = None
-        cache_hit = False
-        summary_reason = None
-        if self._summarizer is not None and summarized:
-            key = _summary_cache_key(self._summarizer.cache_discriminator, summarized)
-            complete_summary = self._cache_get(key)
-            cache_hit = complete_summary is not None
-            if complete_summary is None:
-                try:
-                    complete_summary = self._summarizer.summarize(summarized)
-                    if complete_summary.facts:
-                        self._cache_put(key, complete_summary)
-                    else:
-                        complete_summary = None
-                        summary_reason = "empty_summary"
-                except ProtectedFactMissingError:
-                    summary_reason = "protected_fact_missing"
-                except InvalidHistorySummaryError:
-                    summary_reason = "invalid_summary"
-                except SummaryProviderError:
-                    summary_reason = "provider_error"
-        elif summarized:
-            summary_reason = "invalid_summary"
+        outcome = (
+            self._build_summary(
+                summarized, incremental_enabled=policy.summary_incremental_enabled,
+            )
+            if summarized else _SummaryBuildOutcome(error_reason="empty_summary")
+        )
+        complete_summary = outcome.summary
+        summary_reason = outcome.error_reason
         active_summary = (
             _filter_stale_summary(complete_summary, summarized, recent_indexed)
             if complete_summary is not None else None
@@ -400,7 +538,7 @@ class ContextManager:
         if active_summary is None and not retrieval_result.hits:
             parts = self._summary_fallback(
                 request, policy, summary_reason or "invalid_summary", summarized_count=len(summarized),
-                cache_hit=cache_hit,
+                outcome=outcome,
             )
             parts.retrieval_candidate_count = retrieval_result.candidate_count
             parts.retrieval_eligible_count = retrieval_result.eligible_count
@@ -417,18 +555,19 @@ class ContextManager:
         )
         if packed is None:
             parts = self._summary_fallback(
-                request, policy, "over_budget", summarized_count=len(summarized), cache_hit=cache_hit,
+                request, policy, "over_budget", summarized_count=len(summarized),
+                outcome=outcome,
             )
             parts.retrieval_candidate_count = retrieval_result.candidate_count
             parts.retrieval_eligible_count = retrieval_result.eligible_count
             parts.retrieval_fallback_reason = "protected_fact_over_budget"
             return parts
         recent_messages, retrieved, summary, protected_count, covered_count = packed
-        return _ContextParts(
+        return self._apply_summary_outcome(_ContextParts(
             selected=recent_messages,
             summary=summary,
             retrieved=retrieved,
-            cache_hit=cache_hit,
+            cache_hit=outcome.cache_hit,
             summarized_count=len(summarized),
             summary_fallback_reason=summary_reason,
             retrieval_active=any(
@@ -443,7 +582,7 @@ class ContextManager:
             ),
             protected_count=protected_count,
             protected_covered_count=covered_count,
-        )
+        ), outcome)
 
     def _pack_retrieval_context(
         self,
@@ -716,6 +855,27 @@ def _summary_cache_key(cache_discriminator: str, summarized) -> str:
     }
     serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _message_fingerprints(
+    messages: Sequence[tuple[int, Message]],
+) -> tuple[str, ...]:
+    return tuple(
+        hashlib.sha256(json.dumps(
+            [index, message.model_dump(mode="json")],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        for index, message in messages
+    )
+
+
+def _estimate_summary_prompt_tokens(messages: Sequence[dict[str, str]]) -> int:
+    if not messages:
+        return 0
+    serialized = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
+    return max(1, ceil(len(serialized.encode("utf-8")) / 4))
 
 
 def _fact_covers(protected: ProtectedFact, fact: SummaryFact) -> bool:

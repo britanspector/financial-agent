@@ -60,6 +60,7 @@ def test_qwen_secret_and_model_defaults(monkeypatch):
     assert settings.context_summary_budget_ratio == 0.4
     assert settings.context_summary_cache_size == 128
     assert settings.context_summary_max_facts == 24
+    assert settings.context_summary_incremental_enabled is True
     assert settings.context_retrieval_top_k == 4
     assert settings.context_retrieval_min_score == 0.15
     assert settings.context_retrieval_recent_reservation_ratio == 0.3

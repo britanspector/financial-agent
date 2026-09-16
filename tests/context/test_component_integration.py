@@ -79,7 +79,10 @@ def inputs():
 
 
 def payload(provider):
-    return json.loads(provider.calls[-1][0][1]["content"])
+    result = {}
+    for message in provider.calls[-1][0][1:]:
+        result.update(json.loads(message["content"]))
+    return result
 
 
 def test_all_components_apply_context_before_existing_prompt_builders():
@@ -211,6 +214,8 @@ def test_shared_summary_is_sent_separately_to_all_component_prompts():
     for model_provider in (planner_provider, writer_provider, verifier_provider):
         assert payload(model_provider)["history"] == [{"role": "user", "content": "latest"}]
         assert payload(model_provider)["history_summary"]["facts"][0]["source_message_index"] == 0
+        assert "history_summary" in json.loads(model_provider.calls[-1][0][1]["content"])
+        assert "query" in json.loads(model_provider.calls[-1][0][2]["content"])
     assert len(summary_provider.calls) == 1
 
 
@@ -257,6 +262,7 @@ def test_retrieved_history_is_separate_and_score_is_not_sent_to_components():
         assert body["history_summary"]["facts"][0]["content"] == "durable preference"
         assert body["retrieved_history"][0]["message_indexes"] == [2, 3]
         assert "score" not in body["retrieved_history"][0]
+        assert "history_summary" in json.loads(model_provider.calls[-1][0][1]["content"])
     assert len(summary_provider.calls) == 1
 
 

@@ -19,6 +19,7 @@ class ContextPolicy(Schema):
     last_n: int = Field(default=6, ge=0, le=100_000)
     summary_recent_n: int = Field(default=3, ge=0, le=100_000)
     summary_budget_ratio: float = Field(default=0.4, ge=0, le=1)
+    summary_incremental_enabled: bool = True
     retrieval_top_k: int = Field(default=4, ge=0, le=100)
     retrieval_min_score: float = Field(default=0.15, ge=0, le=2)
     retrieval_recent_reservation_ratio: float = Field(default=0.3, ge=0, le=1)
@@ -45,6 +46,16 @@ class SummaryFact(Schema):
 
 class HistorySummary(Schema):
     facts: list[SummaryFact] = Field(default_factory=list)
+
+
+class SummaryFactReplacement(Schema):
+    existing_fact_index: int = Field(ge=0)
+    fact: SummaryFact
+
+
+class HistorySummaryUpdate(Schema):
+    additions: list[SummaryFact] = Field(default_factory=list)
+    replacements: list[SummaryFactReplacement] = Field(default_factory=list)
 
 
 class RetrievedHistoryTurn(Schema):
@@ -85,6 +96,13 @@ class ContextMetrics(Schema):
     ] | None = None
     protected_fact_count: int = Field(default=0, ge=0)
     protected_fact_covered_count: int = Field(default=0, ge=0)
+    summary_provider_call_count: int = Field(default=0, ge=0)
+    summary_rebuild_count: int = Field(default=0, ge=0)
+    summary_incremental_update_count: int = Field(default=0, ge=0)
+    summary_input_tokens: int = Field(default=0, ge=0)
+    summary_prefix_stability_ratio: float | None = Field(
+        default=None, ge=0, le=1, allow_inf_nan=False,
+    )
 
 
 class ContextSelection(Schema):

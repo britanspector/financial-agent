@@ -57,6 +57,7 @@ def context_policy_from_settings(settings: Settings, component: ContextComponent
         last_n=settings.context_last_n,
         summary_recent_n=settings.context_summary_recent_n,
         summary_budget_ratio=settings.context_summary_budget_ratio,
+        summary_incremental_enabled=settings.context_summary_incremental_enabled,
         retrieval_top_k=settings.context_retrieval_top_k,
         retrieval_min_score=settings.context_retrieval_min_score,
         retrieval_recent_reservation_ratio=settings.context_retrieval_recent_reservation_ratio,

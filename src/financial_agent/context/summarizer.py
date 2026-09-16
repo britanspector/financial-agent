@@ -8,8 +8,13 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
-from financial_agent.context.models import HistorySummary
-from financial_agent.context.summary_prompt import build_summary_messages, summary_response_schema
+from financial_agent.context.models import HistorySummary, HistorySummaryUpdate, SummaryFact
+from financial_agent.context.summary_prompt import (
+    build_incremental_summary_messages,
+    build_summary_messages,
+    summary_response_schema,
+    summary_update_response_schema,
+)
 from financial_agent.context.summary_providers import SummaryProvider, SummaryProviderResponseError
 from financial_agent.schemas import Message
 
@@ -80,6 +85,74 @@ class HistorySummarizer:
             raise ProtectedFactMissingError("Summary omitted protected history facts")
         return summary
 
+    def update(
+        self,
+        existing_summary: HistorySummary,
+        existing_messages: Sequence[tuple[int, Message]],
+        newly_aged_out_messages: Sequence[tuple[int, Message]],
+    ) -> HistorySummary:
+        if not newly_aged_out_messages:
+            return existing_summary
+        raw = self._provider.generate(
+            self.incremental_messages(existing_summary, newly_aged_out_messages),
+            response_schema=summary_update_response_schema(self._max_facts),
+        )
+        try:
+            update = HistorySummaryUpdate.model_validate(raw)
+        except ValidationError as exc:
+            raise InvalidHistorySummaryError("Invalid incremental summary response") from exc
+        replacement_indexes = [item.existing_fact_index for item in update.replacements]
+        if len(replacement_indexes) != len(set(replacement_indexes)):
+            raise InvalidHistorySummaryError("Duplicate incremental replacement index")
+        if any(index >= len(existing_summary.facts) for index in replacement_indexes):
+            raise InvalidHistorySummaryError("Incremental replacement index is out of range")
+
+        new_by_index = {index: message for index, message in newly_aged_out_messages}
+        new_facts = [*update.additions, *(item.fact for item in update.replacements)]
+        for fact in new_facts:
+            source = new_by_index.get(fact.source_message_index)
+            if source is None or fact.content not in source.content:
+                raise InvalidHistorySummaryError("Incremental fact is not grounded in newly aged-out history")
+
+        facts = list(existing_summary.facts)
+        for replacement in update.replacements:
+            facts[replacement.existing_fact_index] = replacement.fact
+        facts.extend(update.additions)
+        target_messages = [*existing_messages, *newly_aged_out_messages]
+        facts = _remove_stale_protected_facts(facts, existing_messages, target_messages)
+        facts = _deduplicate_facts(facts)
+        if len(facts) > self._max_facts:
+            raise InvalidHistorySummaryError("Incremental summary exceeds max facts")
+        summary = HistorySummary(facts=facts)
+        self._validate_complete_summary(summary, target_messages)
+        return summary
+
+    def rebuild_messages(self, summarized_messages: Sequence[tuple[int, Message]]):
+        return build_summary_messages(summarized_messages)
+
+    def incremental_messages(
+        self,
+        existing_summary: HistorySummary,
+        newly_aged_out_messages: Sequence[tuple[int, Message]],
+    ):
+        return build_incremental_summary_messages(
+            existing_summary.model_dump(mode="json"), newly_aged_out_messages,
+        )
+
+    def _validate_complete_summary(
+        self,
+        summary: HistorySummary,
+        messages: Sequence[tuple[int, Message]],
+    ) -> None:
+        by_index = {index: message for index, message in messages}
+        for fact in summary.facts:
+            source = by_index.get(fact.source_message_index)
+            if source is None or fact.content not in source.content:
+                raise InvalidHistorySummaryError("Summary fact is not grounded in its source message")
+        missing = [fact for fact in extract_protected_facts(messages) if not _covered(fact, summary)]
+        if missing:
+            raise ProtectedFactMissingError("Summary omitted protected history facts")
+
 
 def extract_protected_facts(messages: Sequence[tuple[int, Message]]) -> list[ProtectedFact]:
     by_category: dict[str, list[ProtectedFact]] = {"user_id": [], "symbol": [], "date": [], "constraint": []}
@@ -136,3 +209,37 @@ def _covered(protected: ProtectedFact, summary: HistorySummary) -> bool:
         and protected.value.lower() in fact.content.lower()
         for fact in summary.facts
     )
+
+
+def _remove_stale_protected_facts(
+    facts: list[SummaryFact],
+    previous_messages: Sequence[tuple[int, Message]],
+    target_messages: Sequence[tuple[int, Message]],
+) -> list[SummaryFact]:
+    effective = {
+        (fact.category, fact.value.casefold(), fact.source_message_index)
+        for fact in extract_protected_facts(target_messages)
+    }
+    stale = [
+        fact for fact in extract_protected_facts(previous_messages)
+        if (fact.category, fact.value.casefold(), fact.source_message_index) not in effective
+    ]
+    return [
+        fact for fact in facts
+        if not any(
+            fact.source_message_index == protected.source_message_index
+            and protected.value.casefold() in fact.content.casefold()
+            for protected in stale
+        )
+    ]
+
+
+def _deduplicate_facts(facts: Sequence[SummaryFact]) -> list[SummaryFact]:
+    result: list[SummaryFact] = []
+    seen: set[tuple[str, str, int]] = set()
+    for fact in facts:
+        key = (fact.category, fact.content.casefold(), fact.source_message_index)
+        if key not in seen:
+            seen.add(key)
+            result.append(fact)
+    return result

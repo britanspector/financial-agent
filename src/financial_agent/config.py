@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     context_summary_budget_ratio: float = Field(default=0.4, ge=0, le=1)
     context_summary_cache_size: int = Field(default=128, ge=0, le=100_000)
     context_summary_max_facts: int = Field(default=24, ge=1, le=1_000)
+    context_summary_incremental_enabled: bool = True
     context_retrieval_top_k: int = Field(default=4, ge=0, le=100)
     context_retrieval_min_score: float = Field(default=0.15, ge=0, le=2)
     context_retrieval_recent_reservation_ratio: float = Field(default=0.3, ge=0, le=1)
