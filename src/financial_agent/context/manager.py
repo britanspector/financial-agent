@@ -58,6 +58,22 @@ _USER_IMPORTANCE = re.compile(
 )
 
 
+def _selected_message_indexes(original: list[Message], selected: list[Message]) -> list[int]:
+    """Map repeated equal messages without reusing an occurrence."""
+    indexes: list[int] = []
+    cursor = 0
+    used: set[int] = set()
+    for message in selected:
+        match = next((i for i in range(cursor, len(original)) if i not in used and original[i] == message), None)
+        if match is None:
+            match = next((i for i, item in enumerate(original) if i not in used and item == message), None)
+        if match is not None:
+            indexes.append(match)
+            used.add(match)
+            cursor = match + 1
+    return indexes
+
+
 @dataclass
 class _ContextParts:
     selected: list[Message]
@@ -215,7 +231,7 @@ class ContextManager:
             (f"{metrics.summary_prefix_stability_ratio:.6f}"
              if metrics.summary_prefix_stability_ratio is not None else "none"),
         )
-        return ContextSelection(
+        selection = ContextSelection(
             request=UserQuery(
                 request_id=request.request_id,
                 query=request.query,
@@ -225,6 +241,13 @@ class ContextManager:
             summary=parts.summary,
             retrieved_history=parts.retrieved,
         )
+        # Indexes are observability-only and intentionally do not alter the
+        # public ContextSelection serialization contract.
+        from financial_agent.observability.recorder import active_recorder
+        recorder = active_recorder()
+        if recorder is not None:
+            recorder.record_context(selection, _selected_message_indexes(original, parts.selected))
+        return selection
 
     def clear_summary_cache(self, request_id: object | None = None) -> None:
         del request_id

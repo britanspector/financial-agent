@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "sources": [
+    {"role": "phase61_scenarios", "path": "eval/agent_e2e/scenarios.jsonl", "sha256": "21ca0b25caaecea7f5e538855fa8fa27e9966991414748d60e745647213d6ea8"},
+    {"role": "phase61_expectations", "path": "eval/agent_e2e/expectations.jsonl", "sha256": "64a902035d11c32bed9663037436a161c153c992373591dbff64e7b6a5ea97a2"},
+    {"role": "phase63_scenarios", "path": "eval/control_plane_ablation/scenarios.jsonl", "sha256": "42d955c7cfb5f0418ec0cffe29387415825f34c8952485f64b80255e0687190e"},
+    {"role": "phase63_expectations", "path": "eval/control_plane_ablation/expectations.jsonl", "sha256": "cbac16548c9502a51a286ac40ca37b852a117a7f540fed37c2589c1f4904f63c"},
+    {"role": "counterfactuals", "path": "eval/control_plane_ablation/counterfactuals.jsonl", "sha256": "45dd06c7b69181c2ec9c2a68c34ae6498bf40987e72ed6fcf0b888e1cc45782c"}
+  ],
+  "cases": [
+    {"case_id": "single_tool_pass", "mechanism": "control"},
+    {"case_id": "parallel_user_tools", "mechanism": "control"},
+    {"case_id": "market_rag_pass", "mechanism": "control"},
+    {"case_id": "timeout_retry_recovery", "mechanism": "control"},
+    {"case_id": "rate_limit_retry_recovery", "mechanism": "control"},
+    {"case_id": "incomplete_plan_replan", "mechanism": "control"},
+    {"case_id": "wrong_plan_replan_recovery", "mechanism": "control"},
+    {"case_id": "draft_rewrite_recovery", "mechanism": "control"},
+    {"case_id": "history_retrieval_user", "mechanism": "control"},
+    {"case_id": "history_retrieval_entity_time", "mechanism": "control"},
+    {"case_id": "binding_multi_tool", "mechanism": "control"},
+    {"case_id": "shared_budget_exhausted", "mechanism": "expected_failure"},
+    {"case_id": "retry_only_recovery", "mechanism": "retry"},
+    {"case_id": "rewrite_only_recovery", "mechanism": "rewrite"},
+    {"case_id": "replan_only_recovery", "mechanism": "replan"},
+    {"case_id": "context_only_recovery", "mechanism": "context"}
+  ]
+}

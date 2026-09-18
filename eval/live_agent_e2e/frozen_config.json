@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "scenario_path": "eval/live_agent_e2e/scenarios.jsonl",
+  "scenario_sha256": "ba205d4558cc6d1fe3b13af2c26f3978ae4783c3a6c0cf679a7470031bedee4f",
+  "gold_path": "eval/live_agent_e2e/gold.jsonl",
+  "gold_sha256": "3db4eba0bb43bb657ac4cbd1fb4e11bf23309f78026a10f84120051048ba340a",
+  "case_count": 15,
+  "configurations": ["simple_baseline", "full_agent"],
+  "execution_order": "case_major_simple_then_full",
+  "model": "qwen3.7-flash-2026-07-15",
+  "temperature": 0,
+  "max_infra_reruns": 1
+}

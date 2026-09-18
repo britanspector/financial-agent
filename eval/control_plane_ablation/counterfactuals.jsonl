@@ -1,0 +1,7 @@
+{"case_id":"timeout_retry_recovery","component":"writer","trigger":"tool_error","call_index":0,"output":{"answer":"Required customer evidence is unavailable.","evidence":[]}}
+{"case_id":"rate_limit_retry_recovery","component":"writer","trigger":"tool_error","call_index":0,"output":{"answer":"Required customer evidence is unavailable.","evidence":[]}}
+{"case_id":"retry_only_recovery","component":"writer","trigger":"tool_error","call_index":0,"output":{"answer":"Required customer evidence is unavailable.","evidence":[]}}
+{"case_id":"shared_budget_exhausted","component":"writer","trigger":"tool_error","call_index":0,"output":{"answer":"Required customer evidence is unavailable.","evidence":[]}}
+{"case_id":"history_retrieval_user","component":"planner","trigger":"missing_required_prompt","call_index":0,"output":{"decision":"clarify","tasks":[]}}
+{"case_id":"history_retrieval_entity_time","component":"planner","trigger":"missing_required_prompt","call_index":0,"output":{"decision":"clarify","tasks":[]}}
+{"case_id":"context_only_recovery","component":"planner","trigger":"missing_required_prompt","call_index":0,"output":{"decision":"clarify","tasks":[]}}

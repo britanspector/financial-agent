@@ -51,7 +51,12 @@ class StructuredPlanner:
             ),
             response_schema=response_schema,
         )
-        return StructuredPlan.model_validate(payload)
+        output = StructuredPlan.model_validate(payload)
+        from financial_agent.observability.recorder import active_recorder
+        recorder = active_recorder()
+        if recorder is not None:
+            recorder.record_plan(output)
+        return output
 
     def replan(
         self,
@@ -78,6 +83,10 @@ class StructuredPlanner:
         forced = output.force_rerun_task_ids
         if len(forced) != len(set(forced)) or not set(forced).issubset(task_ids):
             raise ValueError("force_rerun_task_ids must be unique IDs in the replacement plan")
+        from financial_agent.observability.recorder import active_recorder
+        recorder = active_recorder()
+        if recorder is not None:
+            recorder.record_plan(output, force_rerun_ids=forced)
         return output
 
 

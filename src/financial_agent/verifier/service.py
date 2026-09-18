@@ -74,4 +74,9 @@ class StructuredVerifier:
             output = VerifierModelOutput.model_validate(raw)
         except ValidationError as exc:
             raise VerifierProviderResponseError("Invalid verifier response") from exc
-        return VerificationResult(**output.model_dump(), failed_task_ids=failed_task_ids)
+        result = VerificationResult(**output.model_dump(), failed_task_ids=failed_task_ids)
+        from financial_agent.observability.recorder import active_recorder
+        recorder = active_recorder()
+        if recorder is not None:
+            recorder.record_verifier(result)
+        return result

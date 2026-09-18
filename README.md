@@ -2,7 +2,7 @@
 
 用于深度学习和求职展示的本地多工具 Agent 工程探索。全部用户数据为 synthetic，不连接真实公司内部系统。
 
-**当前阶段：Phase 5 已完成。** 项目现在用统一的 Context Manager 为 Planner、Answer Writer 和 Verifier 控制历史长度，并支持“最近对话 + 稳定摘要 + 相关历史检索”。默认仍使用兼容旧行为的 `full_history`；需要摘要或检索时必须显式开启。
+**当前阶段：Phase 6.4 已实现。** 项目在离线 E2E Harness、Unified Agent Trace 与 Control Plane Ablation 之上增加冻结的真实 Qwen holdout，用同一组 deterministic synthetic Tool fixture 比较 Simple Baseline 与 Full Agent；模型效果不作为回归硬门禁。
 
 ## 项目结构与依赖
 
@@ -28,6 +28,9 @@ financial-agent/
 │   └── market_data/            # REST Provider、Tool 与 live test
 ├── eval/planner/                # 与 prompt/source 解耦的固定 Planner Eval JSONL
 ├── eval/loop/                   # 15 条离线闭环黑盒验收场景
+├── eval/agent_e2e/              # 12 条 Phase 6.1 全链路固定场景与独立评分 gold
+├── eval/control_plane_ablation/ # Phase 6.3 专属 case、counterfactual fixture 与 combined manifest
+├── eval/live_agent_e2e/         # Phase 6.4 冻结 live holdout、独立 gold 与模型配置
 ├── eval/context/                # 15 条 Phase 5.3 Context Selection baseline
 ├── eval/context_ablation/       # 12 条只用于 Phase 5.4 验收的固定 holdout
 └── data/
@@ -259,6 +262,76 @@ Answer Writer 由 `FINANCIAL_AGENT_ANSWER_MODEL`、`FINANCIAL_AGENT_ANSWER_BASE_
 ```
 
 2026-09-15 本机闭环验收结果为 15/15 通过；REWRITE audit 确认 Tool 调用数不变且传入 Writer 的 Result snapshot 未变化。
+
+## Agent E2E Eval Harness
+
+Phase 6.1 新增 `eval/agent_e2e/` 固定评测集。它通过真实 Structured Planner、Plan Validator、LangGraph execution、Binding、Retry、Answer Writer、Structured Verifier、Replan/Rewrite 和 Context Manager 运行 12 条完整场景；9 个 Tool 使用正式公共 input/output schema，底层 User/Market/Knowledge Service 或 Provider 使用完全离线的 synthetic fixture。模型边界使用检查必要 prompt 片段的确定性 replay provider，场景脚本与评分 gold 分文件保存，避免 scorer 从 provider 输出反推答案。
+
+覆盖一次成功、并行与跨域 Tool、timeout/限流 Retry、缺失 Plan 的 Replan、错误初始 Tool 后恢复、Rewrite、两类长历史 retrieval、持仓到行情的 Binding，以及共享预算耗尽。预算失败场景显式设置 `total_tool_budget=4`：第一轮 Retry 消耗 2 次，第二轮失败与 Retry 再消耗 2 次，第三次 Replan 在新 Tool 启动前以 `total_tool_budget` 停止，不通过堆积 Task 消耗默认 36 次预算。
+
+聚合报告只保留 Task Success Rate、Final Answer Correctness、Tool Selection Accuracy、Unnecessary Tool Call Rate、Replan Recovery Rate、Average Tool Attempts 和 Loop Iterations。Tool Selection 按整轮真正进入 Registry 的 schema-normalized 逻辑 Tool 集评分，Retry 重复 attempt 去重；故意错误的初始 Plan 可以最终成功，同时降低 Tool Selection Accuracy 并产生 unnecessary call。这两个效率指标不作为 12 条场景必须达到完美值的硬门禁。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_agent_e2e.py
+.\.venv\Scripts\python.exe scripts\evaluate_agent_e2e.py --json-report reports/phase6_agent_e2e.json
+.\.venv\Scripts\python.exe scripts\evaluate_agent_e2e.py --trace-jsonl reports/phase6_agent_traces.jsonl
+```
+
+Phase 6.2 后，E2E scorer 直接消费 `evaluation` capture mode 的 Unified Trace：Tool 指标来自强类型 `ToolAttemptEvent`，Context 验证来自 `ContextSelectedEvent`，Retry、Reuse、Replan 和共享 budget 也不再依赖 eval-only recording wrappers。离线 replay 可以证明全链路集成、预算语义和 scorer 可复现，但不能替代真实模型准确率评测。
+
+## Unified Agent Trace / Observability
+
+`financial_agent.observability.run_agent_loop_traced(...)` 包装现有 Loop 并返回 `TracedAgentLoopResult(result, trace, persistence)`；普通 `run_agent_loop(...)` 的签名、结果和异常语义不变，也不会默认写文件。`AgentTrace` 固定使用 schema version `1.0`，事件是以 `kind` 为 discriminator 的 Pydantic union，不使用自由格式 payload。显式传入 `JsonlTraceSink` 时，每个完整 run 写一行；`load_agent_traces(...)` 会逐行验证版本与完整 schema。sink、projection、sanitization 或 serialization 失败只会使 trace 降级或 persistence 标记为 failed，不会覆盖 Agent 原始结果或异常。
+
+默认 `capture_mode="safe"` 不保存 query/history 正文、Tool 参数键和值、Tool result data、draft/final answer、Verifier feedback、task ID 或 binding/evidence path；参数只保留数量、类型摘要与 run-scoped HMAC，模型生成的引用也使用同一 run 的随机 HMAC 关联。受控 synthetic eval 可显式使用 `evaluation` 保存公开值，但两种模式都会递归拒绝 credential、`CallContext`、私有字段与不可 JSON 化对象。`ContextSelection` 公共 schema 没有增加 selected indexes；索引只在 trace projection 中 occurrence-safe 地计算。
+
+```python
+from financial_agent.observability import JsonlTraceSink, run_agent_loop_traced
+
+traced = run_agent_loop_traced(
+    request, planner, validator, registry, writer, verifier,
+    capture_mode="safe",
+    sink=JsonlTraceSink("local-agent-traces.jsonl"),
+)
+```
+
+首版仅提供进程内线程安全的本地完整-run JSONL，不提供事件流、跨进程锁、rotation、远程上传、dashboard 或默认 retention。Trace 是后续 ablation 的可审计输入，不替代应用日志。
+
+## Control Plane Ablation
+
+Phase 6.3 使用 12 条未修改的 Phase 6.1 case 加 4 条机制专属 case，组成 hash 锁定的 16-case combined dataset。五种配置分别启用 Retry、Verifier/Rewrite、Replan 和 Context history；前四种配置通过 eval-only `NoHistoryContextAdapter` 明确清空 history，仅保留 current query，Full Agent 使用 case 原始 Context policy。关闭能力只使用固定 policy 开关或 pass-through verifier，不修改生产 Agent 算法、prompt、Settings 或 Full 参数。
+
+四条专属 case 的 Recovery Rate 固定形成 `0 → 0.25 → 0.5 → 0.75 → 1.0`。Retry、Rewrite、Replan 和 Context attribution 分别要求对应的 typed Trace event 序列以及相邻配置的失败→成功转换；不解析自由文本 reason。`trace_health` 独立于 Agent `run_failure_type`，Trace 降级不会覆盖 tool budget、deadline 或 incorrect answer 等真实执行原因。
+
+Context 成本指标命名为 `total_selected_history_tokens`，表示一次 run 中 planner、writer、verifier 所有 Context selection 的 selected history token 累计值，并同时报告三组件 breakdown。Latency 的 mean/p50/p95 是当前机器上的 small-sample descriptive metric，不用于效果结论或 hard gate。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_control_plane_ablation.py
+.\.venv\Scripts\python.exe scripts\evaluate_control_plane_ablation.py --json-report reports/phase63_ablation.json
+.\.venv\Scripts\python.exe scripts\evaluate_control_plane_ablation.py --trace-jsonl reports/phase63_ablation_traces.jsonl
+```
+
+## Live End-to-End Agent Evaluation
+
+Phase 6.4 使用独立的 15-case holdout，只比较 `simple_baseline` 与 `full_agent`。Planner、Writer、Verifier 和需要时的 Summary 都使用冻结模型 `qwen3.7-flash-2026-07-15`、temperature 0；Tool backend 继续使用 Phase 6.1 的本地 deterministic synthetic Service/Provider，不访问真实行情、数据库或知识服务。Baseline 明确使用 `NoHistoryContextAdapter`、无 Retry、pass-through Verifier 且禁止 Rewrite/Replan；Full Agent 保留 case 中冻结的生产 policy。
+
+`eval/live_agent_e2e/frozen_config.json` 固定 case 顺序、两种配置顺序、模型、temperature、一次 infra rerun 上限及 scenario/gold SHA-256。执行顺序始终是逐 case 的 Baseline 后 Full。只有 Planner/Writer/Verifier/Summary 的 timeout、429 或 provider unavailable 使整轮无效时，才完整重跑一次；首次与重跑 Trace 都保留。Tool 业务失败、模型错误和答案错误不会选择性重跑。
+
+报告包含 Task Success、Final Answer Correctness、Planner correctness、Retry/Rewrite/Replan/Context recovery、Tool attempts、Unnecessary Tool Call Rate、Loop iterations、累计 `total_selected_history_tokens` 及组件 breakdown、latency、Trace health 和 failure attribution。失败域固定区分 `model_error`、`agent_control_error`、`tool/business_error`、`provider/infra_error`、`scorer/eval_error`；每个 cell 同时保留 query、gold、初始 plan、replan/rewrite、Tool attempts、最终答案/evidence 和 trace ID。evaluation Trace 只包含 synthetic/public 数据，Unified Trace sanitizer 仍拒绝凭证和私有字段。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_agent_live.py `
+  --json-report reports/phase64_live.json `
+  --trace-jsonl reports/phase64_live_traces.jsonl
+```
+
+该命令需要本地 `.env` 或环境变量中的 `FINANCIAL_AGENT_QWEN_API_KEY` 并访问 Qwen endpoint，不属于默认 pytest 或 integration gate。硬门禁只检查冻结数据/hash、typed schema、scorer、完整可审计 Trace、failure attribution 和既有回归；真实模型分数如实保存，不因结果修改 prompt、Context budget/BM25 threshold、Retry/Replan policy 或 gold。Latency 是固定顺序单次小样本诊断值，不代表生产 SLA 或统计显著性。
+
+2026-09-16 冻结 holdout 的首次正式运行产生 30 个 run、无 infra rerun，30/30 Trace 均为 healthy，harness hard gate 通过。可解的 14 条 case 中，Baseline 与 Full 的 Task Success / Final Answer Correctness 都是 14.29%，Full 没有提高最终成功率；Planner correctness 从 60.00% 提高到 73.33%。Full 的平均 Tool attempts 从 0.933 增至 1.200，累计 selected-history tokens 从 0 增至 26.267，平均 latency 从 3,901.7ms 增至 4,860.0ms（+958.3ms），Unnecessary Tool Call Rate 两者均为 21.43%。
+
+两个 Retry 专属 case 均真实触发 Retry 且 Tool 在第二次 attempt 恢复，但后续 Writer evidence 校验失败，所以端到端 recovery 为 0/2。两个长历史 case 在 Full 中都保留了所需上下文并形成正确初始 Plan，Baseline 为 0/2；它们同样在 Writer 阶段失败，因此 Context 的最终任务 recovery 为 0/2。Rewrite 专属 case 未到达 Verifier，未触发 Rewrite；Replan 专属 case 也未触发，只有 persistent-budget case 真实触发一次 Replan 并按 4-attempt 共享预算停止。结果因此不能证明 Verifier/Rewrite/Replan 在此模型版本上能提高成功率。
+
+主导失败是模型对 evidence contract 的遵循问题：Full 有 10 次、Baseline 有 8 次 `AnswerProviderResponseError`。诊断样本显示模型把 `source_path` 写成包含 envelope 的 `["data", ...]`，而冻结公共契约要求路径从 `ToolResult.data` 内部开始；该结果作为 `model_error` 保留，没有调整 prompt、schema、gold 或重跑 case。另有一处 scorer-only 修正：`InvalidPlanError` 从 `agent_control_error` 纠正为 `model_error`，并由 typed provider exception 补齐组件归属；修正只离线重算持久化结果，没有 Qwen 调用。原始报告、修正报告与 Trace 分别为 `reports/phase64_live_raw.json`、`reports/phase64_live.json`、`reports/phase64_live_traces.jsonl`。
 
 ## Context Manager
 
@@ -521,6 +594,10 @@ registry = register_user_tools(UserDataService(
 - Phase 4.2（2026-09-13）：265 个默认测试通过；Structured Verifier 覆盖结构化判定、确定性失败清单、共享 Result Path、输入一致性、Provider 错误和四项边界 Eval 指标；真实 Qwen Eval 独立使用 `-m live` 或脚本运行。
 - Phase 4.3（2026-09-15）：293 个默认测试通过，15/15 固定 Loop Eval 通过；闭环覆盖 PASS/REWRITE/REPLAN 路由、完整替换计划、success/empty 复用、force rerun、error 不复用、旧结果裁剪、依赖安全失效、跨轮共享 Tool attempt 预算和 no-progress 三条件判定。
 - Phase 5（2026-09-16）：Context Manager、增量稳定摘要、本地历史检索和独立 holdout ablation 完成；离线硬门禁通过，live 报告按 Full History 基线区分 Context regression、baseline failure 和 infra failure。
+- Phase 6.1（2026-09-16）：369 个默认测试和 2 个 integration tests 通过；12/12 固定 Agent E2E 场景通过。Task Success、Final Answer Correctness 和 Replan Recovery 均为 1.0000，Tool Selection Accuracy 为 0.9167，Unnecessary Tool Call Rate 为 0.0556，Average Tool Attempts 为 1.8333，Loop Iterations 为 1.3333。
+- Phase 6.2（2026-09-16）：382 个默认测试和 2 个 integration tests 通过；新增 safe/evaluation 双 capture mode、强类型 `AgentTrace`、统一 projection/sanitization、失败隔离的 recorder 与本地 JSONL round-trip；Phase 6.1 scorer 已迁移到 Unified Trace，固定指标口径与 gold 未改变。
+- Phase 6.3（2026-09-16）：392 个默认测试和 2 个 integration tests 通过；16 个 case 在 5 种配置下形成 80 个完整 Trace，Full Agent 保持 Phase 6.1 原 12 条全部兼容，四项机制 attribution 与 Recovery staircase 通过。
+- Phase 6.4（2026-09-16）：冻结 15-case live holdout，以真实 Qwen 固定模型/temperature 0 比较 Baseline 与 Full，Tool 仍为 deterministic fixture；30 个 Trace 全部健康、无 infra rerun，效果分数如实保留且未针对 holdout 调参。
 - 覆盖四个业务 Tool、FastAPI endpoint、Async HTTP Client、空数据/缺失值、401、403、404、422、超时、429、503，以及 Decimal、分页、时间边界、只读/外键/SQL 注入、故障顺序、审计与 CLI。
 - Market Data 测试使用 `httpx.MockTransport`，不访问 live provider；live smoke test 使用 `pytest -m live` 单独运行。
 
@@ -541,6 +618,9 @@ registry = register_user_tools(UserDataService(
 - Provider 解耦的 Structured Verifier、严格 PASS/REWRITE/REPLAN schema、确定性 failed_task_ids 和固定 Verifier Eval Set。
 - Verifier 驱动的有界 Agent Loop、证据约束 Answer Writer、完整 Replan、依赖安全结果复用、显式 force rerun 和跨轮 Tool attempt 总预算。
 - Planner、Writer、Verifier 共用的 Context Manager、五种 history 策略、Incremental Stable Summary、本地 BM25 history retrieval、弹性预算、安全指标及可注入 estimator/provider/retriever。
+- 完全离线的 Agent E2E Eval Harness：真实 9 Tool 契约、全链路 Retry/Replan/Rewrite/Binding/Context、结构化答案与证据评分，以及七项固定聚合指标。
+- 版本化 Unified Agent Trace：强类型事件、跨并行 Tool 的真实发生序列、单 Task attempt/retry 关联、loop-level budget、safe/evaluation projection、失败隔离和显式本地 JSONL sink。
+- 五配置 Control Plane Ablation：固定 combined manifest、机制专属 recovery case、Trace-backed attribution、独立 trace health/failure taxonomy，以及 Tool/Loop/Context token/latency 成本比较。
 - Prompt-independent 的 40 条 Planner Eval Set：单/并行/依赖、三源组合、当前/历史时间、RAG filters、法规、FAQ、无关 Tool 与 abstain 边界，以及六项离线/真实模型通用指标。
 
 ## 已知限制
@@ -555,10 +635,13 @@ registry = register_user_tools(UserDataService(
 - Market Data v0.1 已提供同步 Tushare REST Provider；120 积分下尚无指数、复权、实时行情、分钟线、Level-2、新闻、资金流或指标库。
 - 当前为同步本地访问；审计没有多进程并发保证、轮转或防篡改能力。日志不是通用敏感数据脱敏器。
 - Context budget 只覆盖 history，尚不覆盖 query、tools、plan、Tool Results、draft 或 feedback；history retrieval 仍无 embedding/reranker，Summary 增量更新只支持 additions/replacements 且不跨进程持久化；`summary_prefix_stability_ratio` 不是 Provider cache hit 指标，也不提供长期 Memory、精确 tokenizer 或 KV Cache 优化。
+- Phase 6.1/6.2 使用确定性 replay provider 和 synthetic Service/Provider fixture，只证明链路、预算语义、trace 完整性与 scorer 可复现；不代表真实模型生产准确率。
+- Unified Trace 首版没有 event streaming、跨进程文件锁、rotation、远程平台、dashboard 或生产级 retention；safe HMAC 只保证 run 内关联，不支持跨 run 用户追踪。
+- Phase 6.3 latency 来自单机小样本离线运行，只能描述当前 run，不用于声称生产性能、统计显著性或配置优劣。
 - 依赖只有兼容范围，未锁定全部传递依赖；只在当前 Windows 环境验证。
 
 ## 下一步
 
-Phase 5 已结束。下一阶段可考虑语义检索、完整 prompt/token/cost 预算和循环 trace 持久化。长期 Memory、跨会话持久化和 Agentic RL 不属于 Phase 5。
+Phase 6.4 已结束。当前首要限制不是 Tool 执行或 Trace，而是固定 Qwen 模型对 evidence path 契约的遵循率，使多数 run 在 Verifier 前终止；在独立开发集上修复模型契约兼容性后，应使用新的预注册 holdout，而不是回调本批 gold。长期 Memory、跨会话持久化和 Agentic RL 仍不在当前范围内。
 
 后续工程约束：外部模型和数据源必须经 adapter/registry，LangGraph node 不直接依赖 provider SDK；API key 仅由环境配置注入；所有用户数据为 synthetic；每个功能补测试，并同步更新 README 的“当前能力 / 已知限制 / 下一步”。

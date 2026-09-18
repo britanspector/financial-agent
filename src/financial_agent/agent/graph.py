@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from threading import Lock
 from time import monotonic, sleep
-from typing import Any, Callable, Protocol
+from typing import TYPE_CHECKING, Any, Callable, Protocol
 from uuid import UUID, uuid4
 
 from langgraph.graph import END, START, StateGraph
@@ -25,6 +25,9 @@ from financial_agent.agent.result_path import ResultPathError, resolve_result_pa
 from financial_agent.schemas import UserQuery
 from financial_agent.tools.contracts import ToolError, ToolResult
 from financial_agent.user_data.auth import CallContext
+
+if TYPE_CHECKING:
+    from financial_agent.observability.recorder import AgentTraceRecorder, TraceScope
 
 
 class ToolInvoker(Protocol):
@@ -47,6 +50,8 @@ class ExecutionRuntime:
     retry_policy: RetryPolicy
     budget: ExecutionBudget
     sleeper: Callable[[float], None]
+    recorder: "AgentTraceRecorder | None" = None
+    trace_scope: "TraceScope | None" = None
 
 
 def build_execution_graph(
@@ -187,7 +192,14 @@ def build_execution_graph(
         attempt_count = 0
         result: ToolResult | None = None
         while True:
+            budget_before = run.recorder.projector.budget(run.budget) if run.recorder else None
             if not run.budget.reserve_attempt():
+                if run.recorder:
+                    _record_in_runtime_scope(
+                        run, run.recorder.record_tool_blocked, task, attempt_count + 1,
+                        "deadline" if run.budget.deadline_exceeded else "attempt_budget",
+                        run.recorder.projector.budget(run.budget),
+                    )
                 if result is None:
                     task_result = _control_error(
                         task,
@@ -205,24 +217,53 @@ def build_execution_graph(
                     )
                 return {"tool_results": [task_result]}
 
-            result = registry.invoke(
-                task.tool_name,
-                task.arguments,
-                context=run.call_context,
-                request_id=uuid4(),
-            )
+            started = monotonic()
+            try:
+                result = registry.invoke(
+                    task.tool_name,
+                    task.arguments,
+                    context=run.call_context,
+                    request_id=uuid4(),
+                )
+            except BaseException as exc:
+                if run.recorder:
+                    _record_in_runtime_scope(run, run.recorder.record_component_failed, "tool", exc)
+                raise
             attempt_count += 1
+            if run.recorder:
+                _record_in_runtime_scope(
+                    run, run.recorder.record_tool_attempt, task, attempt_count, result,
+                    max(0.0, (monotonic() - started) * 1000), budget_before,
+                    run.recorder.projector.budget(run.budget),
+                )
             if (
                 result.status != "error"
                 or result.error is None
                 or not result.error.retryable
                 or attempt_count >= run.retry_policy.max_retry + 1
             ):
+                if run.recorder and result.status == "error":
+                    reason = "not_retryable" if result.error is None or not result.error.retryable else "max_retry"
+                    _record_in_runtime_scope(
+                        run, run.recorder.record_retry, task, attempt_count + 1, 0.0,
+                        run.recorder.projector.budget(run.budget), reason=reason,
+                    )
                 break
 
             delay = run.retry_policy.backoff_seconds(attempt_count - 1)
             if not run.budget.allows_retry_after(delay):
+                if run.recorder:
+                    reason = "deadline" if run.budget.deadline_exceeded else "attempt_budget"
+                    _record_in_runtime_scope(
+                        run, run.recorder.record_retry, task, attempt_count + 1, delay,
+                        run.recorder.projector.budget(run.budget), reason=reason,
+                    )
                 break
+            if run.recorder:
+                _record_in_runtime_scope(
+                    run, run.recorder.record_retry, task, attempt_count + 1, delay,
+                    run.recorder.projector.budget(run.budget),
+                )
             run.sleeper(delay)
 
         return {
@@ -310,11 +351,15 @@ def run_execution_graph(
     _validate_initial_results(task_list, seeded)
     state = AgentState.from_query(request, task_list, tool_results=seeded)
     policy = retry_policy or RetryPolicy()
+    from financial_agent.observability.recorder import active_recorder, active_scope
+    recorder = active_recorder()
     runtime = ExecutionRuntime(
         call_context=context or CallContext(),
         retry_policy=policy,
         budget=ExecutionBudget(policy, clock=clock, attempt_budget=attempt_budget),
         sleeper=sleeper,
+        recorder=recorder,
+        trace_scope=active_scope() if recorder else None,
     )
     config: dict[str, Any] = {"recursion_limit": max(25, len(tasks) * 4 + 5)}
     if max_concurrency is not None:
@@ -329,6 +374,19 @@ def run_execution_graph(
         sleeper=sleeper,
     ).invoke(state, config=config, context=runtime)
     return AgentState.model_validate(result)
+
+
+def _record_in_runtime_scope(run: ExecutionRuntime, callback, *args, **kwargs) -> None:
+    """Restore loop correlation explicitly inside graph worker threads."""
+    if run.recorder is None:
+        return
+    scope = run.trace_scope
+    with run.recorder.scope(
+        operation=scope.operation if scope else "execute",
+        iteration=scope.iteration if scope else None,
+        plan_revision=scope.plan_revision if scope else None,
+    ):
+        callback(*args, **kwargs)
 
 
 def _validate_initial_results(
