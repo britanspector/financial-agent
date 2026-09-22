@@ -2,6 +2,7 @@
 
 from financial_agent.observability.models import (
     AgentTrace, ComponentFailedEvent, ContextSelectedEvent, LoopIterationCompletedEvent,
+    ModelCallCompletedEvent, ModelCallFailedEvent, ModelCallStartedEvent,
     PlanProposedEvent, PlanValidatedEvent, RetryScheduledEvent, RetrySkippedEvent,
     RunFailedEvent, RunFinishedEvent, RunStartedEvent, ToolAttemptBlockedEvent,
     ToolAttemptEvent, ToolReuseEvent, TraceCaptureMode, TraceDegradedEvent, TraceEvent,
@@ -14,6 +15,7 @@ from financial_agent.observability.sinks import InMemoryTraceSink, JsonlTraceSin
 __all__ = [
     "AgentTrace", "ComponentFailedEvent", "ContextSelectedEvent", "InMemoryTraceSink",
     "JsonlTraceSink", "LoopIterationCompletedEvent", "PlanProposedEvent", "PlanValidatedEvent",
+    "ModelCallCompletedEvent", "ModelCallFailedEvent", "ModelCallStartedEvent",
     "RetryScheduledEvent", "RetrySkippedEvent", "RunFailedEvent", "RunFinishedEvent",
     "RunStartedEvent", "ToolAttemptBlockedEvent", "ToolAttemptEvent", "ToolReuseEvent",
     "TraceCaptureMode", "TraceDegradedEvent", "TraceEvent", "TracePersistence",

@@ -37,7 +37,7 @@ class QwenEmbeddingProvider:
         self._url = _endpoint(base_url, "services/embeddings/text-embedding/text-embedding")
         self._timeout = timeout
         self._query_instruct = query_instruct
-        self._client = client or httpx.Client()
+        self._client = client or httpx.Client(trust_env=False)
 
     @property
     def descriptor(self) -> EmbeddingDescriptor:
@@ -101,7 +101,7 @@ class QwenRerankerProvider:
         self._url = _endpoint(base_url, "services/rerank/text-rerank/text-rerank")
         self._timeout = timeout
         self._instruct = instruct
-        self._client = client or httpx.Client()
+        self._client = client or httpx.Client(trust_env=False)
 
     def rerank(self, query: str, documents: list[str], *, top_n: int) -> list[RerankResult]:
         if not documents or top_n <= 0:

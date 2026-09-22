@@ -33,7 +33,7 @@ class QwenPlannerProvider:
         self._url = f"{base_url.rstrip('/')}/chat/completions"
         self._timeout = timeout
         self._temperature = temperature
-        self._client = client or httpx.Client()
+        self._client = client or httpx.Client(trust_env=False)
         # Kept only on this short-lived adapter for diagnostic comparison.  It is
         # deliberately not logged because it can contain user query/history text.
         self._last_raw_response: dict[str, Any] | None = None
@@ -42,6 +42,10 @@ class QwenPlannerProvider:
     def last_raw_response(self) -> dict[str, Any] | None:
         """Exact decoded structured-output object returned by the provider."""
         return deepcopy(self._last_raw_response)
+
+    @property
+    def model_name(self) -> str:
+        return self._model
 
     def generate(
         self,

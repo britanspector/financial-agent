@@ -113,6 +113,49 @@ def test_evaluation_trace_keeps_public_synthetic_values_but_not_call_context():
     assert "PRIVATE-CREDENTIAL" not in serialized
 
 
+def test_model_call_trace_keeps_exact_io_only_in_evaluation_mode():
+    messages = [{"role": "system", "content": "PRIVATE-MODEL-CONTEXT"}]
+    response_schema = {"type": "object", "required": ["decision"]}
+    response = {"decision": "PASS", "reason": "PRIVATE-MODEL-RESPONSE"}
+
+    evaluation = AgentTraceRecorder(uuid4(), capture_mode="evaluation")
+    with evaluation.activate(), evaluation.scope(operation="verify", iteration=2, plan_revision=1):
+        call_index = evaluation.record_model_call_started(
+            "verifier", "fixture-model", messages, response_schema,
+        )
+        evaluation.record_model_call_completed(
+            "verifier", call_index, "fixture-model", response,
+        )
+
+    started, completed = evaluation.events
+    assert started.kind == "model_call_started"
+    assert started.call_index == completed.call_index == 1
+    assert started.messages.value == messages
+    assert started.response_schema.value == response_schema
+    assert completed.response.value == response
+    assert started.iteration == completed.iteration == 2
+
+    safe = AgentTraceRecorder(uuid4(), capture_mode="safe")
+    with safe.activate():
+        safe_index = safe.record_model_call_started(
+            "verifier", "fixture-model", messages, response_schema,
+        )
+        safe.record_model_call_completed("verifier", safe_index, "fixture-model", response)
+    serialized = json.dumps(
+        [event.model_dump(mode="json", exclude_none=True) for event in safe.events],
+    )
+    assert "PRIVATE-MODEL-CONTEXT" not in serialized
+    assert "PRIVATE-MODEL-RESPONSE" not in serialized
+    assert all(
+        projection.value is None
+        for event in safe.events
+        for projection in (
+            [event.messages, event.response_schema]
+            if event.kind == "model_call_started" else [event.response]
+        )
+    )
+
+
 def test_plain_and_traced_loop_results_have_same_behavior():
     registry = _Registry()
     request = UserQuery(query="same")

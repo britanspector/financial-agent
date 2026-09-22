@@ -87,6 +87,31 @@ class ContextSelectedEvent(TraceEventBase):
     retrieved_content: list[str] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
+class ModelCallStartedEvent(TraceEventBase):
+    kind: Literal["model_call_started"] = "model_call_started"
+    component: Literal["planner", "writer", "verifier"]
+    call_index: int = Field(ge=1)
+    model: str
+    messages: ValueProjection
+    response_schema: ValueProjection
+
+
+class ModelCallCompletedEvent(TraceEventBase):
+    kind: Literal["model_call_completed"] = "model_call_completed"
+    component: Literal["planner", "writer", "verifier"]
+    call_index: int = Field(ge=1)
+    model: str
+    response: ValueProjection
+
+
+class ModelCallFailedEvent(TraceEventBase):
+    kind: Literal["model_call_failed"] = "model_call_failed"
+    component: Literal["planner", "writer", "verifier"]
+    call_index: int = Field(ge=1)
+    model: str
+    exception_type: str
+
+
 class PlanProposedEvent(TraceEventBase):
     kind: Literal["plan_proposed"] = "plan_proposed"
     decision: Literal["execute", "clarify", "no_tool"]
@@ -217,7 +242,8 @@ class TraceDegradedEvent(TraceEventBase):
 
 
 TraceEvent = Annotated[
-    RunStartedEvent | ContextSelectedEvent | PlanProposedEvent | PlanValidatedEvent
+    RunStartedEvent | ContextSelectedEvent | ModelCallStartedEvent | ModelCallCompletedEvent
+    | ModelCallFailedEvent | PlanProposedEvent | PlanValidatedEvent
     | ToolReuseEvent | ToolAttemptEvent | ToolAttemptBlockedEvent | RetryScheduledEvent
     | RetrySkippedEvent | WriterCompletedEvent | VerifierCompletedEvent
     | LoopIterationCompletedEvent | ComponentFailedEvent | RunFinishedEvent

@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 from financial_agent.agent.models import Task
 from financial_agent.observability.models import (
     AgentTrace, ComponentFailedEvent, ContextSelectedEvent, LoopIterationCompletedEvent,
+    ModelCallCompletedEvent, ModelCallFailedEvent, ModelCallStartedEvent,
     PlanProposedEvent, PlanValidatedEvent, RetryScheduledEvent, RetrySkippedEvent,
     RunFailedEvent, RunFinishedEvent, RunStartedEvent, ToolAttemptBlockedEvent,
     ToolAttemptEvent, ToolReuseEvent, TraceCaptureMode, TraceDegradedEvent, TraceEvent,
@@ -63,6 +64,7 @@ class AgentTraceRecorder:
         self._sequence = 0
         self._dropped = 0
         self._error_codes: list[str] = []
+        self._model_call_counts: dict[str, int] = {}
         self._lock = Lock()
 
     @contextmanager
@@ -171,6 +173,40 @@ class AgentTraceRecorder:
             )
         except BaseException:
             self._degrade("TRACE_PROJECTION_FAILED")
+
+    def record_model_call_started(self, component: str, model: str, messages, response_schema) -> int:
+        with self._lock:
+            call_index = self._model_call_counts.get(component, 0) + 1
+            self._model_call_counts[component] = call_index
+        self._record(
+            ModelCallStartedEvent,
+            component=component,
+            call_index=call_index,
+            model=model,
+            messages=self.projector.value(messages),
+            response_schema=self.projector.value(response_schema),
+        )
+        return call_index
+
+    def record_model_call_completed(self, component: str, call_index: int, model: str, response) -> None:
+        self._record(
+            ModelCallCompletedEvent,
+            component=component,
+            call_index=call_index,
+            model=model,
+            response=self.projector.value(response),
+        )
+
+    def record_model_call_failed(
+        self, component: str, call_index: int, model: str, exc: BaseException,
+    ) -> None:
+        self._record(
+            ModelCallFailedEvent,
+            component=component,
+            call_index=call_index,
+            model=model,
+            exception_type=type(exc).__name__,
+        )
 
     def record_validation(self, validation) -> None:
         try:

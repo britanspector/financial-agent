@@ -1,6 +1,7 @@
 """Qwen OpenAI-compatible adapter for structured answer output."""
 
 import json
+from copy import deepcopy
 from typing import Any
 import httpx
 
@@ -18,7 +19,17 @@ class QwenAnswerProvider:
             raise ValueError("Qwen API key is required")
         self._api_key, self._model = api_key, model
         self._url, self._timeout, self._temperature = f"{base_url.rstrip('/')}/chat/completions", timeout, temperature
-        self._client = client or httpx.Client()
+        self._client = client or httpx.Client(trust_env=False)
+        self._last_raw_response: dict[str, Any] | None = None
+
+    @property
+    def last_raw_response(self) -> dict[str, Any] | None:
+        """Return a defensive copy for local evaluation diagnostics."""
+        return deepcopy(self._last_raw_response)
+
+    @property
+    def model_name(self) -> str:
+        return self._model
 
     def generate(self, messages: list[dict[str, str]], *, response_schema: dict[str, Any]) -> dict[str, Any]:
         payload = {"model": self._model, "messages": messages, "temperature": self._temperature,
@@ -42,4 +53,5 @@ class QwenAnswerProvider:
             raise AnswerProviderResponseError("Invalid answer response") from exc
         if not isinstance(result, dict):
             raise AnswerProviderResponseError("Invalid answer response")
+        self._last_raw_response = deepcopy(result)
         return result

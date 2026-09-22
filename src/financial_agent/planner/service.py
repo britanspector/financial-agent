@@ -42,15 +42,13 @@ class StructuredPlanner:
         )
         contextual_request = selection.request
         response_schema = _tool_aware_response_schema(self._catalog.describe())
-        payload = self._provider.generate(
-            build_planner_messages(
-                contextual_request,
-                self._catalog.describe(),
-                history_summary=selection.summary,
-                retrieved_history=selection.retrieved_history,
-            ),
-            response_schema=response_schema,
+        messages = build_planner_messages(
+            contextual_request,
+            self._catalog.describe(),
+            history_summary=selection.summary,
+            retrieved_history=selection.retrieved_history,
         )
+        payload = _generate_traced(self._provider, "planner", messages, response_schema)
         output = StructuredPlan.model_validate(payload)
         from financial_agent.observability.recorder import active_recorder
         recorder = active_recorder()
@@ -70,14 +68,12 @@ class StructuredPlanner:
         )
         contextual_request = selection.request
         tools = self._catalog.describe()
-        payload = self._provider.generate(
-            build_replanner_messages(
-                contextual_request, tools, previous_plan, tool_results, feedback,
-                history_summary=selection.summary,
-                retrieved_history=selection.retrieved_history,
-            ),
-            response_schema=_replan_response_schema(tools),
+        messages = build_replanner_messages(
+            contextual_request, tools, previous_plan, tool_results, feedback,
+            history_summary=selection.summary,
+            retrieved_history=selection.retrieved_history,
         )
+        payload = _generate_traced(self._provider, "planner", messages, _replan_response_schema(tools))
         output = ReplanOutput.model_validate(payload)
         task_ids = [task.task_id for task in output.tasks]
         forced = output.force_rerun_task_ids
@@ -88,6 +84,26 @@ class StructuredPlanner:
         if recorder is not None:
             recorder.record_plan(output, force_rerun_ids=forced)
         return output
+
+
+def _generate_traced(provider, component: str, messages, response_schema):
+    from financial_agent.observability.recorder import active_recorder
+
+    recorder = active_recorder()
+    model = getattr(provider, "model_name", type(provider).__name__)
+    call_index = (
+        recorder.record_model_call_started(component, model, messages, response_schema)
+        if recorder is not None else 0
+    )
+    try:
+        response = provider.generate(messages, response_schema=response_schema)
+    except BaseException as exc:
+        if recorder is not None:
+            recorder.record_model_call_failed(component, call_index, model, exc)
+        raise
+    if recorder is not None:
+        recorder.record_model_call_completed(component, call_index, model, response)
+    return response
 
 
 def _tool_aware_response_schema(tools: list[dict[str, Any]]) -> dict[str, Any]:

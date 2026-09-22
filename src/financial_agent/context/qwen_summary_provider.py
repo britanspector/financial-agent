@@ -32,7 +32,7 @@ class QwenSummaryProvider:
         self._url = f"{base_url.rstrip('/')}/chat/completions"
         self._timeout = timeout
         self._temperature = temperature
-        self._client = client or httpx.Client()
+        self._client = client or httpx.Client(trust_env=False)
 
     def generate(self, messages: list[dict[str, str]], *, response_schema: dict[str, Any]) -> dict[str, Any]:
         payload = {

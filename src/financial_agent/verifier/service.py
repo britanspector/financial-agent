@@ -57,19 +57,17 @@ class StructuredVerifier:
             request, "verifier", self._context_policy,
         )
         contextual_request = selection.request
-        raw = self._provider.generate(
-            build_verifier_messages(
-                contextual_request,
-                tasks,
-                ordered_results,
-                draft,
-                resolved_evidence=resolved_evidence,
-                failed_task_ids=failed_task_ids,
-                history_summary=selection.summary,
-                retrieved_history=selection.retrieved_history,
-            ),
-            response_schema=verifier_response_schema(),
+        messages = build_verifier_messages(
+            contextual_request,
+            tasks,
+            ordered_results,
+            draft,
+            resolved_evidence=resolved_evidence,
+            failed_task_ids=failed_task_ids,
+            history_summary=selection.summary,
+            retrieved_history=selection.retrieved_history,
         )
+        raw = _generate_traced(self._provider, "verifier", messages, verifier_response_schema())
         try:
             output = VerifierModelOutput.model_validate(raw)
         except ValidationError as exc:
@@ -80,3 +78,23 @@ class StructuredVerifier:
         if recorder is not None:
             recorder.record_verifier(result)
         return result
+
+
+def _generate_traced(provider, component: str, messages, response_schema):
+    from financial_agent.observability.recorder import active_recorder
+
+    recorder = active_recorder()
+    model = getattr(provider, "model_name", type(provider).__name__)
+    call_index = (
+        recorder.record_model_call_started(component, model, messages, response_schema)
+        if recorder is not None else 0
+    )
+    try:
+        response = provider.generate(messages, response_schema=response_schema)
+    except BaseException as exc:
+        if recorder is not None:
+            recorder.record_model_call_failed(component, call_index, model, exc)
+        raise
+    if recorder is not None:
+        recorder.record_model_call_completed(component, call_index, model, response)
+    return response

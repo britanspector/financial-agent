@@ -32,7 +32,11 @@ class QwenVerifierProvider:
         self._url = f"{base_url.rstrip('/')}/chat/completions"
         self._timeout = timeout
         self._temperature = temperature
-        self._client = client or httpx.Client()
+        self._client = client or httpx.Client(trust_env=False)
+
+    @property
+    def model_name(self) -> str:
+        return self._model
 
     def generate(
         self,

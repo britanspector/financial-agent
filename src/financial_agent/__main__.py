@@ -32,6 +32,14 @@ def main() -> int:
     serve = commands.add_parser("serve-user-data", help="Start the local FastAPI user-data service")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
+    console = commands.add_parser("serve-dev-console", help="Start the local traced Agent developer console")
+    console.add_argument("--host", default="127.0.0.1")
+    console.add_argument("--port", type=int, default=4173)
+    console.add_argument("--model", help="Override Planner, Writer, Verifier, and Summary model for this server")
+    console.add_argument(
+        "--provider-timeout", type=float, default=90.0,
+        help="Qwen Planner/Writer/Verifier/Summary timeout in seconds (default: 90)",
+    )
     call = commands.add_parser("call-tool", help="Invoke an authenticated local tool")
     call.add_argument("name")
     call.add_argument("--user-id", required=True)
@@ -53,6 +61,31 @@ def main() -> int:
         import uvicorn
         uvicorn.run(
             create_app(settings), host=args.host, port=args.port,
+            log_level=settings.log_level.lower(), access_log=False,
+        )
+        return 0
+    if args.command == "serve-dev-console":
+        import uvicorn
+        from financial_agent.dev_console import create_dev_console_app
+
+        if not 0 < args.provider_timeout <= 300:
+            parser.error("--provider-timeout must be greater than 0 and at most 300")
+        console_overrides = {
+            "planner_timeout_seconds": args.provider_timeout,
+            "answer_timeout_seconds": args.provider_timeout,
+            "verifier_timeout_seconds": args.provider_timeout,
+            "summary_timeout_seconds": args.provider_timeout,
+        }
+        if args.model:
+            console_overrides.update({
+                "planner_model": args.model,
+                "answer_model": args.model,
+                "verifier_model": args.model,
+                "summary_model": args.model,
+            })
+        settings = settings.model_copy(update=console_overrides)
+        uvicorn.run(
+            create_dev_console_app(settings), host=args.host, port=args.port,
             log_level=settings.log_level.lower(), access_log=False,
         )
         return 0
